@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "drive": "node _drive.mjs"
+    "drive": "node _drive.mjs",
+    "test": "node --test src/lib/blast.test.js"
   },
   "dependencies": {
     "pixi-viewport": "^6.0.3",

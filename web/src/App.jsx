@@ -14,6 +14,24 @@ const CORPUS = 'aeon';
 // `meta.counts.edges` lets us decide without fetching the file first.
 const EAGER_EDGE_LIMIT = 20000;
 
+/**
+ * Unwrap edges.json and refuse to mix it with a layout from a different build.
+ *
+ * A cached layout against a fresh edge file resolves fewer ids and silently
+ * returns a SMALLER blast radius — a plausible-looking wrong number. Loud
+ * failure is the only safe behaviour here.
+ */
+function readEdges(doc, layout) {
+  const got = doc?.meta?.buildId;
+  const want = layout?.meta?.buildId;
+  if (want && got && got !== want) {
+    throw new Error(
+      `edges.json is from a different build (${got} vs layout ${want}) — hard-refresh, or re-run npm run build:graph`
+    );
+  }
+  return doc.edges;
+}
+
 function buildAdjacency(edges) {
   const adj = new Map();
   const push = (a, b, rel, conf, dir) => {
@@ -54,7 +72,7 @@ export default function App() {
           const er = await fetch(`/data/${CORPUS}.edges.json`);
           if (cancelled) return;
           if (er.ok) {
-            edges = await er.json();
+            edges = readEdges(await er.json(), data);
             edgesRef.current = edges;
             setAdjacency(buildAdjacency(edges));
           }
@@ -84,13 +102,13 @@ export default function App() {
     if (!edges) {
       const res = await fetch(`/data/${CORPUS}.edges.json`);
       if (!res.ok) throw new Error(`edges fetch failed: ${res.status}`);
-      edges = await res.json();
+      edges = readEdges(await res.json(), layout);
       edgesRef.current = edges;
     }
     const adj = buildAdjacency(edges);
     setAdjacency(adj);
     return adj;
-  }, [adjacency]);
+  }, [adjacency, layout]);
 
   const nodeById = useMemo(() => {
     if (!layout) return new Map();

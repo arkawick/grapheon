@@ -66,7 +66,8 @@ app needs for first paint, which is what makes a backendless static deploy work.
 
 ```json
 {
-  "meta":   { "source": "graphify", "name": "aeon", "laid_out_at": "…", "iterations": 600 },
+  "meta":   { "source": "graphify", "name": "aeon", "laid_out_at": "…",
+              "iterations": 600, "buildId": "3f9a2c1b8de4" },
   "nodes":  [{ "id": "…", "l": "llm.py", "k": "code", "c": 7, "h": 210,
                "r": 9.4, "x": 4021, "y": 2887, "a": { "path": "…", "loc": "L1" } }],
   "bounds": { "width": 7203, "height": 7203 },
@@ -85,7 +86,17 @@ them.
   a zoom level.
 - `communities[].label` is the most-connected member of the community. For code
   a community is a subsystem, and "llm.py" reads as something where
-  "Community 7" does not. Deterministic — no LLM involved.
+  "Community 7" does not. No LLM involved.
+- `buildId` identifies the build by its **inputs** (canonical nodes + edges +
+  iterations + seed), so reproducible runs share an id and a changed corpus
+  gets a new one.
+
+**Builds are reproducible.** Louvain visits nodes in random order and orphan
+parking jitters positions, so both draw from a seeded PRNG — otherwise two runs
+over identical input give different community counts, and the committed
+canonical graph would not pin the map derived from it. Compare the `nodes` /
+`communities` / `bounds` payload, not the whole file: `laid_out_at` is a
+timestamp and always differs.
 
 **There are no edges in this file, on purpose.** Thousands of lines at 60fps buy
 a grey haze that hides the clusters the layout just worked to reveal. The map
@@ -96,12 +107,21 @@ reads as pure position.
 ## 3. Edges — `web/public/data/<name>.edges.json`
 
 ```json
-[["aeon_backend_core_llm", "os", "imports", "EXTRACTED"]]
+{
+  "meta":  { "buildId": "3f9a2c1b8de4" },
+  "edges": [["aeon_backend_core_llm", "os", "imports", "EXTRACTED"]]
+}
 ```
 
-Fetched **lazily, on the first node selection**, never for first paint. The map
-never draws them; they exist so selecting a node can light up its neighbourhood
-— the Blast Radius primitive — with no backend involved.
+Fetched **before first paint when the corpus is small enough to draw edges**
+(`meta.counts.edges` decides, without fetching the file), and lazily on first
+selection otherwise. They power the neighbourhood spotlight and Blast Radius,
+with no backend involved.
 
 `weight` is dropped here: it was a layout input, and the UI cares about the
 relation and its provenance instead.
+
+**`buildId` must match the layout's**, and the app throws if it doesn't. A
+cached layout against a fresh edge file resolves fewer node ids and silently
+returns a *smaller* blast radius — a plausible-looking wrong number is worse
+than an error.

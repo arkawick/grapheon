@@ -1,0 +1,6 @@
+# Normalise to LF in the repo; git checks out native on Windows. Without this,
+# every commit from this machine warns "LF will be replaced by CRLF".
+* text=auto eol=lf
+
+*.png binary
+*.json text eol=lf

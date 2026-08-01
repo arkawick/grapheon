@@ -14,7 +14,27 @@
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { build } = require('./layout');
+
+/**
+ * Identifies a build by its INPUTS, so two reproducible runs produce the same
+ * id and a changed corpus produces a different one.
+ *
+ * Stamped into both output files. The app refuses to mix them when the ids
+ * disagree — without that, a browser holding a cached layout.json against a
+ * fresh edges.json resolves fewer node ids and quietly returns a SMALLER blast
+ * radius. A wrong impact number that looks plausible is worse than an error.
+ */
+function buildId(canonical, iterations, seed) {
+  return crypto
+    .createHash('sha1')
+    .update(JSON.stringify(canonical.nodes))
+    .update(JSON.stringify(canonical.edges))
+    .update(`${iterations}:${seed}`)
+    .digest('hex')
+    .slice(0, 12);
+}
 
 const ADAPTERS = {
   graphify: require('./adapters/graphify'),
@@ -58,7 +78,11 @@ function main() {
   fs.mkdirSync(path.dirname(canonPath), { recursive: true });
   fs.writeFileSync(canonPath, JSON.stringify(canonical));
 
-  const layout = build(canonical, { iterations, log: (m) => console.log(m) });
+  const seed = Number(arg('--seed', 1));
+  const layout = build(canonical, { iterations, seed, log: (m) => console.log(m) });
+
+  const id = buildId(canonical, iterations, seed);
+  layout.meta.buildId = id;
 
   const outPath = path.join(ROOT, 'web', 'public', 'data', `${name}.layout.json`);
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
@@ -74,7 +98,7 @@ function main() {
   // relation and its EXTRACTED/INFERRED provenance instead.
   const edgePath = path.join(ROOT, 'web', 'public', 'data', `${name}.edges.json`);
   const edges = canonical.edges.map(([s, t, , rel, conf]) => [s, t, rel, conf]);
-  fs.writeFileSync(edgePath, JSON.stringify(edges));
+  fs.writeFileSync(edgePath, JSON.stringify({ meta: { buildId: id }, edges }));
   const ekb = (fs.statSync(edgePath).size / 1e3).toFixed(0);
   console.log(`Wrote ${path.relative(ROOT, edgePath)} (${edges.length} edges, ${ekb} KB, lazy-loaded)`);
 
