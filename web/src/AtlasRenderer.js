@@ -22,12 +22,34 @@ import { Viewport } from 'pixi-viewport';
 const BG = 0x0a0a0f;
 const GRID_CELL = 600; // world units per spatial-hash bucket
 
+/**
+ * Above this many edges, don't draw them at all.
+ *
+ * Kagami's "edges become a grey haze that hides the clusters" finding was
+ * measured at ~290k edges, and it is correct there. At Aeon's ~1.7k it is
+ * exactly backwards: the edges ARE the structure, and without them the map is
+ * a pretty scatter you cannot trace a dependency through. So the choice is made
+ * per corpus rather than baked in.
+ */
+const MAX_DRAWN_EDGES = 20000;
+
+// Target on-screen thickness in CSS pixels. Edges are redrawn on zoom to hold
+// this, because a fixed world-unit width is either invisible when zoomed out or
+// thicker than the nodes when zoomed in.
+const EDGE_PX = 0.7;
+const EDGE_ALPHA = 0.34;      // within a community
+const EDGE_ALPHA_BRIDGE = 0.07; // between communities
+const EDGE_ALPHA_DIM = 0.03;
+const EDGE_ALPHA_HOT = 0.85;
+
 export class AtlasRenderer {
   constructor(canvas) {
     this.canvas = canvas;
     this.app = null;
     this.viewport = null;
     this.nodes = [];
+    this.edges = [];           // [source, target, relation, confidence][]
+    this.edgeLayer = null;     // Graphics | null (null when the corpus is too big)
     this.sprites = new Map();  // id -> Sprite
     this.nodeById = new Map(); // id -> node (O(1) lookups on recolour and focus)
     this.grid = new Map();     // "gx,gy" -> node[]
@@ -37,8 +59,13 @@ export class AtlasRenderer {
     this.onHover = () => {};
   }
 
-  async init(layout) {
+  /**
+   * @param {object} layout  the .layout.json payload
+   * @param {Array=} edges   the .edges.json payload; omit to render nodes only
+   */
+  async init(layout, edges = null) {
     this.nodes = layout.nodes;
+    this.edges = Array.isArray(edges) ? edges : [];
     const { width, height } = layout.bounds;
 
     this.app = new Application();
@@ -59,6 +86,13 @@ export class AtlasRenderer {
     this.viewport.drag().pinch().wheel({ smooth: 3 }).decelerate();
     this.viewport.clampZoom({ minScale: 0.03, maxScale: 6 });
     this.app.stage.addChild(this.viewport);
+
+    // Edges go in first so they render beneath every node. Kept null when the
+    // corpus is too dense to draw legibly — see MAX_DRAWN_EDGES.
+    if (this.edges.length && this.edges.length <= MAX_DRAWN_EDGES) {
+      this.edgeLayer = new Graphics();
+      this.viewport.addChild(this.edgeLayer);
+    }
 
     const circle = this._circleTexture();
 
@@ -101,6 +135,9 @@ export class AtlasRenderer {
         const r = Math.max(s._r, minWorld);
         s.width = s.height = r * 2;
       }
+      // Line thickness is specified in world units, so holding a constant
+      // on-screen weight means redrawing whenever the zoom changes.
+      this._redrawEdges();
     };
     this.viewport.on('zoomed-end', this._applyLOD);
     this._applyLOD();
@@ -134,6 +171,70 @@ export class AtlasRenderer {
       (Math.round((g + m) * 255) << 8) |
       Math.round((b + m) * 255)
     );
+  }
+
+  /**
+   * Repaint every edge for the current zoom, filter and highlight state.
+   *
+   * Batched by colour: all segments sharing a hue are accumulated into one path
+   * and stroked once, so ~1.7k edges cost roughly as many stroke calls as there
+   * are communities, not as there are edges. Cheap enough to redo on zoom.
+   *
+   * An edge takes the hue of its SOURCE node, which makes a community's
+   * internal wiring read as one colour and its outbound dependencies read as
+   * intrusions of that colour into a neighbour — the thing you actually want to
+   * spot on a code map.
+   */
+  _redrawEdges() {
+    const g = this.edgeLayer;
+    if (!g) return;
+    g.clear();
+
+    const width = EDGE_PX / this.viewport.scaled;
+    const kf = this.kindFilter;
+    const hl = this.highlightIds;
+
+    // Because the layout separates communities in space, a cross-community edge
+    // is long BY CONSTRUCTION — ~8% of Aeon's edges span more than a third of
+    // the map, and at equal weight those few dozen lines visually dominate the
+    // thousand short ones that describe the actual local structure. Drawing
+    // them as faint grey bridges keeps the information (you can still see that
+    // a subsystem reaches across the map) without letting it drown the rest.
+    const normal = new Map(); // hue -> [a, b][]  (within one community)
+    const bridge = [];        // between communities
+    const dim = [];
+    const hot = [];
+
+    for (const [s, t] of this.edges) {
+      const a = this.nodeById.get(s);
+      const b = this.nodeById.get(t);
+      if (!a || !b) continue;
+
+      const visible = !kf || (kf.has(a.k) && kf.has(b.k));
+      if (!visible) { dim.push([a, b]); continue; }
+
+      if (hl) {
+        if (hl.has(s) && hl.has(t)) hot.push([a, b]);
+        else dim.push([a, b]);
+        continue;
+      }
+      if (a.c !== b.c) { bridge.push([a, b]); continue; }
+      if (!normal.has(a.h)) normal.set(a.h, []);
+      normal.get(a.h).push([a, b]);
+    }
+
+    const stroke = (pairs, color, alpha) => {
+      if (!pairs.length) return;
+      for (const [a, b] of pairs) { g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); }
+      g.stroke({ color, width, alpha });
+    };
+
+    // Painted back to front: dimmed, then bridges, then each community's own
+    // wiring, then the selection.
+    stroke(dim, 0x8b8b9e, EDGE_ALPHA_DIM);
+    stroke(bridge, 0x8b8b9e, EDGE_ALPHA_BRIDGE);
+    for (const [hue, pairs] of normal) stroke(pairs, this._hueToRgb(hue), EDGE_ALPHA);
+    stroke(hot, 0xffffff, EDGE_ALPHA_HOT);
   }
 
   _index(n) {
@@ -214,6 +315,7 @@ export class AtlasRenderer {
       if (hl) s.alpha = hl.has(id) ? 1 : 0.06;
       else s.alpha = 0.92;
     }
+    this._redrawEdges();
   }
 
   focus(id, zoom = 0.6) {

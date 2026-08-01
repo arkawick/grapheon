@@ -6,10 +6,17 @@ import Legend from './Legend.jsx';
 
 const CORPUS = 'aeon';
 
+// Below this, edges are worth drawing and we fetch them before first paint so
+// the map is never briefly edgeless. Above it the renderer won't draw them
+// anyway, so they stay lazy and only load when something is selected.
+// `meta.counts.edges` lets us decide without fetching the file first.
+const EAGER_EDGE_LIMIT = 20000;
+
 export default function App() {
   const canvasRef = useRef(null);
   const rendererRef = useRef(null);
   const adjacencyRef = useRef(null); // built once, on the first selection
+  const edgesRef = useRef(null);     // set eagerly when the corpus is small
 
   const [layout, setLayout] = useState(null);
   const [error, setError] = useState(null);
@@ -31,8 +38,18 @@ export default function App() {
         if (cancelled) return;
         setLayout(data);
 
+        let edges = null;
+        if ((data.meta?.counts?.edges ?? Infinity) <= EAGER_EDGE_LIMIT) {
+          const er = await fetch(`/data/${CORPUS}.edges.json`);
+          if (er.ok) {
+            edges = await er.json();
+            edgesRef.current = edges; // reused by loadAdjacency; don't fetch twice
+          }
+          if (cancelled) return;
+        }
+
         renderer = new AtlasRenderer(canvasRef.current);
-        await renderer.init(data);
+        await renderer.init(data, edges);
         if (cancelled) { renderer.destroy(); return; }
         rendererRef.current = renderer;
         renderer.onSelect = (n) => setSelected(n);
@@ -52,9 +69,13 @@ export default function App() {
   // draws them; they exist only to answer "what touches this?".
   const loadAdjacency = useCallback(async () => {
     if (adjacencyRef.current) return adjacencyRef.current;
-    const res = await fetch(`/data/${CORPUS}.edges.json`);
-    if (!res.ok) throw new Error(`edges fetch failed: ${res.status}`);
-    const edges = await res.json();
+    let edges = edgesRef.current;
+    if (!edges) {
+      const res = await fetch(`/data/${CORPUS}.edges.json`);
+      if (!res.ok) throw new Error(`edges fetch failed: ${res.status}`);
+      edges = await res.json();
+      edgesRef.current = edges;
+    }
     const adj = new Map();
     const push = (a, b, rel, conf, dir) => {
       if (!adj.has(a)) adj.set(a, []);

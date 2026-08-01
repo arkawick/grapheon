@@ -29,6 +29,50 @@ function worldSize(nodeCount) {
 }
 
 /**
+ * ForceAtlas2 repulsion and gravity, scaled to graph density.
+ *
+ * Kagami's constants (scalingRatio 12, gravity 0.4) are tuned for a graph with
+ * average degree ~25. Aeon's code graph averages ~3.2, where that much
+ * repulsion overwhelms the attraction and flings nodes clean out of their own
+ * community: measured, 11.9% of intra-community edges ended up spanning more
+ * than a fifth of the map, which renders as bright spikes across it.
+ *
+ * Re-tuning to (2, 1.5) drops that to 0.6% — a 20x improvement — and more
+ * iterations do not help (600 and 1200 score identically), which is the
+ * signature of a force-balance problem rather than an unconverged one.
+ *
+ * Interpolated between those two measured points so both corpora stay correct.
+ */
+function fa2Settings(avgDegree) {
+  const SPARSE = { deg: 3.2, scalingRatio: 2, gravity: 1.5 };  // Aeon
+  const DENSE = { deg: 25, scalingRatio: 12, gravity: 0.4 };   // Kagami
+  const t = Math.max(0, Math.min(1, (avgDegree - SPARSE.deg) / (DENSE.deg - SPARSE.deg)));
+  return {
+    scalingRatio: SPARSE.scalingRatio + t * (DENSE.scalingRatio - SPARSE.scalingRatio),
+    gravity: SPARSE.gravity + t * (DENSE.gravity - SPARSE.gravity),
+  };
+}
+
+/**
+ * Seeded PRNG (mulberry32), so a build is reproducible.
+ *
+ * Two things here are randomised: Louvain visits nodes in random order, and
+ * orphan parking jitters positions. Left on Math.random, two runs over
+ * identical input produced 48 and then 47 communities, which means the
+ * committed canonical graph does NOT pin the map you get from it. Seeding is
+ * what makes "deterministic" true rather than merely plausible.
+ */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
  * Degree is heavy-tailed — in Aeon the agent graph has 56 edges while the
  * median node has 2. A linear radius makes one node a continent and everything
  * else a speck, so sqrt compresses it into a range the eye can compare.
@@ -38,7 +82,8 @@ function radius(degree, maxDegree) {
   return 3 + norm * 14;
 }
 
-function build(canonical, { iterations = 600, log = () => {} } = {}) {
+function build(canonical, { iterations = 600, log = () => {}, fa2 = {}, seed = 1 } = {}) {
+  const rng = mulberry32(seed);
   const { nodes, edges } = canonical;
   if (!nodes.length) throw new Error('Empty graph — nothing to lay out.');
 
@@ -81,7 +126,7 @@ function build(canonical, { iterations = 600, log = () => {} } = {}) {
   graph.forEachNode((id) => { maxDegree = Math.max(maxDegree, graph.degree(id)); });
 
   // --- Communities ------------------------------------------------------------
-  louvain.assign(graph, { resolution: 1.0, getEdgeWeight: 'weight' });
+  louvain.assign(graph, { resolution: 1.0, getEdgeWeight: 'weight', rng });
   const communities = new Set();
   graph.forEachNode((_, attr) => communities.add(attr.community));
   log(`  ${communities.size} communities detected (Louvain)`);
@@ -128,6 +173,10 @@ function build(canonical, { iterations = 600, log = () => {} } = {}) {
   });
 
   // --- Layout -----------------------------------------------------------------
+  const avgDegree = (2 * graph.size) / graph.order;
+  const tuned = fa2Settings(avgDegree);
+  log(`  average degree ${avgDegree.toFixed(1)} -> scalingRatio ` +
+      `${tuned.scalingRatio.toFixed(1)}, gravity ${tuned.gravity.toFixed(2)}`);
   log(`Running ForceAtlas2 (${iterations} iterations, Barnes-Hut) ...`);
   const t0 = Date.now();
   forceAtlas2.assign(graph, {
@@ -135,9 +184,9 @@ function build(canonical, { iterations = 600, log = () => {} } = {}) {
     settings: {
       barnesHutOptimize: true, // O(n log n); without it this is minutes -> hours
       barnesHutTheta: 0.6,
-      gravity: 0.4,
-      scalingRatio: 12,
       slowDown: 4,
+      ...tuned,
+      ...fa2, // explicit caller override, used by the tuning sweep
       strongGravityMode: false,
       edgeWeightInfluence: 0.5,
       linLogMode: true, // tightens clusters, widens the gaps between them
@@ -164,7 +213,7 @@ function build(canonical, { iterations = 600, log = () => {} } = {}) {
   const orphans = graph.filterNodes((id) => graph.degree(id) === 0);
   orphans.forEach((id, i) => {
     const a = (i / orphans.length) * 2 * Math.PI;
-    const jitter = 1 + (Math.random() - 0.5) * 0.06;
+    const jitter = 1 + (rng() - 0.5) * 0.06;
     graph.setNodeAttribute(id, 'x', bx + Math.cos(a) * edgeR * jitter);
     graph.setNodeAttribute(id, 'y', by + Math.sin(a) * edgeR * jitter);
   });
