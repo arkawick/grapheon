@@ -1,31 +1,42 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { HashRouter, Routes, Route } from 'react-router-dom';
 import { AtlasRenderer } from './AtlasRenderer.js';
-import SearchBox from './SearchBox.jsx';
-import DetailPanel from './DetailPanel.jsx';
-import Legend from './Legend.jsx';
+import { GraphContext } from './GraphContext.js';
+import Sidebar from './components/Sidebar.jsx';
+import AtlasPage from './pages/AtlasPage.jsx';
+import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
 
 const CORPUS = 'aeon';
 
 // Below this, edges are worth drawing and we fetch them before first paint so
 // the map is never briefly edgeless. Above it the renderer won't draw them
-// anyway, so they stay lazy and only load when something is selected.
+// anyway, so they stay lazy and only load when something needs them.
 // `meta.counts.edges` lets us decide without fetching the file first.
 const EAGER_EDGE_LIMIT = 20000;
+
+function buildAdjacency(edges) {
+  const adj = new Map();
+  const push = (a, b, rel, conf, dir) => {
+    if (!adj.has(a)) adj.set(a, []);
+    adj.get(a).push({ id: b, rel, conf, dir });
+  };
+  for (const [s, t, rel, conf] of edges) {
+    push(s, t, rel, conf, 'out'); // s depends on t
+    push(t, s, rel, conf, 'in');  // t is depended upon by s
+  }
+  return adj;
+}
 
 export default function App() {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
-  const adjacencyRef = useRef(null); // built once, on the first selection
-  const edgesRef = useRef(null);     // set eagerly when the corpus is small
+  const edgesRef = useRef(null);
 
   const [layout, setLayout] = useState(null);
+  const [adjacency, setAdjacency] = useState(null);
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
-  const [neighbours, setNeighbours] = useState([]);
-  const [hidden, setHidden] = useState(() => new Set());
 
-  // React StrictMode mounts effects twice in dev. A WebGL context is not free
-  // and the second init would leak the first one, so the teardown is real.
   useEffect(() => {
     let cancelled = false;
     let renderer = null;
@@ -41,11 +52,12 @@ export default function App() {
         let edges = null;
         if ((data.meta?.counts?.edges ?? Infinity) <= EAGER_EDGE_LIMIT) {
           const er = await fetch(`/data/${CORPUS}.edges.json`);
+          if (cancelled) return;
           if (er.ok) {
             edges = await er.json();
-            edgesRef.current = edges; // reused by loadAdjacency; don't fetch twice
+            edgesRef.current = edges;
+            setAdjacency(buildAdjacency(edges));
           }
-          if (cancelled) return;
         }
 
         renderer = new AtlasRenderer(containerRef.current);
@@ -65,10 +77,9 @@ export default function App() {
     };
   }, []);
 
-  // Edges are fetched once, on the first selection, and cached. The map never
-  // draws them; they exist only to answer "what touches this?".
-  const loadAdjacency = useCallback(async () => {
-    if (adjacencyRef.current) return adjacencyRef.current;
+  /** Fetch + index edges on demand, for corpora too big to load eagerly. */
+  const ensureAdjacency = useCallback(async () => {
+    if (adjacency) return adjacency;
     let edges = edgesRef.current;
     if (!edges) {
       const res = await fetch(`/data/${CORPUS}.edges.json`);
@@ -76,112 +87,67 @@ export default function App() {
       edges = await res.json();
       edgesRef.current = edges;
     }
-    const adj = new Map();
-    const push = (a, b, rel, conf, dir) => {
-      if (!adj.has(a)) adj.set(a, []);
-      adj.get(a).push({ id: b, rel, conf, dir });
-    };
-    for (const [s, t, rel, conf] of edges) {
-      push(s, t, rel, conf, 'out');
-      push(t, s, rel, conf, 'in');
-    }
-    adjacencyRef.current = adj;
+    const adj = buildAdjacency(edges);
+    setAdjacency(adj);
     return adj;
-  }, []);
+  }, [adjacency]);
 
-  useEffect(() => {
-    const r = rendererRef.current;
-    if (!r) return;
-    if (!selected) {
-      setNeighbours([]);
-      r.highlight(null);
-      return;
-    }
-    let stale = false;
-    (async () => {
-      const adj = await loadAdjacency();
-      if (stale) return;
-      const links = adj.get(selected.id) ?? [];
-      setNeighbours(links);
-      // Spotlight the selection plus its immediate neighbourhood.
-      r.highlight([selected.id, ...links.map((l) => l.id)]);
-    })();
-    return () => { stale = true; };
-  }, [selected, loadAdjacency]);
-
-  const toggleKind = useCallback((kind) => {
-    setHidden((prev) => {
-      const next = new Set(prev);
-      next.has(kind) ? next.delete(kind) : next.add(kind);
-      const visible = layout.kinds.filter((k) => !next.has(k));
-      // null means "no filter" — cheaper than a Set containing everything.
-      rendererRef.current?.setKindFilter(
-        visible.length === layout.kinds.length ? null : visible
-      );
-      return next;
-    });
+  const nodeById = useMemo(() => {
+    if (!layout) return new Map();
+    return new Map(layout.nodes.map((n) => [n.id, n]));
   }, [layout]);
 
-  const goTo = useCallback((node) => {
+  const focus = useCallback((node) => {
     setSelected(node);
     rendererRef.current?.focus(node.id);
   }, []);
 
+  const highlight = useCallback((ids) => {
+    rendererRef.current?.highlight(ids);
+  }, []);
+
+  const setKindFilter = useCallback((kinds) => {
+    rendererRef.current?.setKindFilter(kinds);
+  }, []);
+
+  const value = useMemo(() => ({
+    layout, adjacency, ensureAdjacency, nodeById,
+    selected, setSelected, focus, highlight, setKindFilter,
+  }), [layout, adjacency, ensureAdjacency, nodeById, selected, focus, highlight, setKindFilter]);
+
   return (
-    <div className="app">
-      <div className="canvas-wrap" ref={containerRef} />
+    <HashRouter>
+      <GraphContext.Provider value={value}>
+        <div className="app">
+          <Sidebar />
 
-      <header className="topbar">
-        <div className="brand">
-          Grapheon
-          <span className="corpus">{layout?.meta?.name ?? CORPUS}</span>
+          <main className="stage">
+            {/*
+              The canvas lives ABOVE the router on purpose. Routing it would
+              tear down and rebuild the WebGL context on every navigation —
+              ~0.5-1.5s each time, and rapid create/destroy cycles are exactly
+              what caused the init race we already fixed. Pages render as
+              panels over a map that never unmounts.
+            */}
+            <div className="canvas-wrap" ref={containerRef} />
+
+            {!layout && !error && <div className="status">Loading atlas…</div>}
+            {error && (
+              <div className="status error">
+                {error}
+                <div className="hint">Run: npm run build:graph</div>
+              </div>
+            )}
+
+            {layout && (
+              <Routes>
+                <Route path="/" element={<AtlasPage />} />
+                <Route path="/blast" element={<BlastRadiusPage />} />
+              </Routes>
+            )}
+          </main>
         </div>
-        {layout && (
-          <SearchBox nodes={layout.nodes} onPick={goTo} />
-        )}
-      </header>
-
-      {layout && (
-        <Legend
-          communities={layout.communities}
-          kinds={layout.kinds}
-          hidden={hidden}
-          onToggleKind={toggleKind}
-          onPickCommunity={(c) => {
-            const node = layout.nodes.find((n) => n.c === c.id && n.l === c.label);
-            if (node) goTo(node);
-          }}
-        />
-      )}
-
-      {selected && (
-        <DetailPanel
-          node={selected}
-          neighbours={neighbours}
-          communities={layout?.communities ?? []}
-          onClose={() => setSelected(null)}
-          onPick={(id) => {
-            const n = layout.nodes.find((x) => x.id === id);
-            if (n) goTo(n);
-          }}
-        />
-      )}
-
-      {!layout && !error && <div className="status">Loading atlas…</div>}
-      {error && (
-        <div className="status error">
-          {error}
-          <div className="hint">Run: npm run build:graph</div>
-        </div>
-      )}
-
-      {layout && (
-        <footer className="statusbar">
-          {layout.nodes.length.toLocaleString()} nodes ·{' '}
-          {layout.communities.length} communities · extracted by{' '}
-          {layout.meta.source}
-        </footer>
-      )}
-    </div>
+      </GraphContext.Provider>
+    </HashRouter>
   );
 }

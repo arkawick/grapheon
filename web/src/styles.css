@@ -19,27 +19,65 @@ html, body, #root {
   overflow: hidden;
 }
 
-.app { position: relative; height: 100%; }
+/* Sidebar is a fixed rail; the stage fills whatever is left and owns the
+   canvas, which never unmounts across navigation. */
+.app { display: flex; height: 100%; }
+.stage { position: relative; flex: 1; min-width: 0; }
 .canvas-wrap { position: absolute; inset: 0; }
 canvas { display: block; width: 100%; height: 100%; }
 
-/* --- top bar --------------------------------------------------------------- */
-.topbar {
-  position: absolute; top: 0; left: 0; right: 0;
-  display: flex; align-items: center; gap: 16px;
-  padding: 12px 16px;
-  pointer-events: none;
+/* --- sidebar --------------------------------------------------------------- */
+.sidebar {
+  width: 208px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  padding: 14px 12px;
+  background: #0d0d14;
+  border-right: 1px solid var(--border);
 }
-.topbar > * { pointer-events: auto; }
 
 .brand {
   font-weight: 600; letter-spacing: 0.02em;
   display: flex; align-items: baseline; gap: 8px;
+  padding: 0 6px 14px;
 }
 .corpus {
   font-weight: 400; font-size: 11px; color: var(--dim);
   border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px;
 }
+
+.nav { list-style: none; margin: 0; padding: 0; flex: 1; }
+.nav a {
+  display: block; padding: 7px 8px; margin-bottom: 2px;
+  border-radius: 7px; text-decoration: none; color: var(--text);
+  border-left: 2px solid transparent;
+}
+.nav a:hover { background: rgba(255, 255, 255, 0.05); }
+.nav a.active { background: rgba(125, 211, 252, 0.10); border-left-color: var(--accent); }
+.nav-label { display: block; font-size: 13px; }
+.nav-hint { display: block; font-size: 10.5px; color: var(--dim); }
+
+.sidebar-foot {
+  font-size: 11px; color: var(--text); padding: 10px 8px 0;
+  border-top: 1px solid var(--border); line-height: 1.7;
+}
+
+/* --- page chrome ----------------------------------------------------------- */
+.page-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 16px;
+  pointer-events: none;
+}
+.page-bar > * { pointer-events: auto; }
+
+/* Shared shell for a page's side panel. */
+.panel {
+  position: absolute; right: 16px; top: 56px; bottom: 16px;
+  width: 340px; padding: 16px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  backdrop-filter: blur(8px); overflow-y: auto;
+}
+.panel h1 { margin: 0; font-size: 15px; font-weight: 600; }
 
 /* --- search ---------------------------------------------------------------- */
 .search { position: relative; flex: 1; max-width: 420px; }
@@ -72,7 +110,7 @@ canvas { display: block; width: 100%; height: 100%; }
 
 /* --- legend ---------------------------------------------------------------- */
 .legend {
-  position: absolute; left: 16px; bottom: 44px;
+  position: absolute; left: 16px; bottom: 16px;
   width: 220px; padding: 12px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
   backdrop-filter: blur(8px);
@@ -97,7 +135,7 @@ canvas { display: block; width: 100%; height: 100%; }
 
 /* --- detail panel ---------------------------------------------------------- */
 .detail {
-  position: absolute; right: 16px; top: 56px; bottom: 44px;
+  position: absolute; right: 16px; top: 56px; bottom: 16px;
   width: 340px; padding: 16px;
   background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
   backdrop-filter: blur(8px);
@@ -146,10 +184,53 @@ canvas { display: block; width: 100%; height: 100%; }
 .dim { color: var(--dim); }
 .empty { font-size: 12px; }
 
-.statusbar {
-  position: absolute; left: 16px; bottom: 12px;
-  font-size: 11px; color: var(--dim);
+/* --- blast radius ---------------------------------------------------------- */
+.blast .question { margin: 4px 0 14px; font-size: 12px; }
+
+.controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+.seg { display: flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.seg button {
+  flex: 1; padding: 5px 8px; background: none; border: 0;
+  color: var(--dim); font: inherit; font-size: 12px; cursor: pointer;
 }
+.seg button.on { background: rgba(125, 211, 252, 0.14); color: var(--accent); }
+.seg button:not(.on):hover { background: rgba(255, 255, 255, 0.05); }
+
+.depth { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--dim); }
+.depth strong { color: var(--text); min-width: 10px; }
+.depth input { flex: 1; accent-color: var(--accent); }
+
+.root {
+  display: flex; align-items: center; gap: 9px;
+  padding: 9px; margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.04); border-radius: 8px;
+}
+.root-label { font-weight: 600; word-break: break-word; }
+
+.tally { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.tally .big { font-size: 30px; font-weight: 600; line-height: 1; }
+.tally .dim { font-size: 11px; line-height: 1.35; }
+
+.caveat {
+  margin: 0 0 12px; padding: 8px 10px; font-size: 11.5px; line-height: 1.45;
+  background: rgba(234, 179, 8, 0.10); border-left: 2px solid #fde047;
+  border-radius: 0 6px 6px 0; color: #fde047;
+}
+
+.ring { margin-top: 14px; }
+.ring h3 {
+  margin: 0 0 5px; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--dim);
+}
+.ring ul { margin: 0; padding: 0; list-style: none; }
+.ring li { display: flex; align-items: center; gap: 6px; padding: 1px 0; }
+.ring button {
+  flex: 1; background: none; border: 0; padding: 2px 4px; border-radius: 4px;
+  color: var(--accent); font: inherit; font-size: 11.5px; text-align: left;
+  cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.ring button:hover { background: rgba(255, 255, 255, 0.06); }
+.ring .via { font-size: 10px; white-space: nowrap; }
 
 .status {
   position: absolute; inset: 0;

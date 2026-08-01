@@ -24,9 +24,9 @@ page.on('pageerror', (e) => errors.push(String(e)));
 
 await page.goto(URL, { waitUntil: 'networkidle' });
 
-// The status bar only renders once the layout has parsed and the renderer is up.
-await page.waitForSelector('.statusbar', { timeout: 20000 });
-const status = await page.textContent('.statusbar');
+// The sidebar footer only renders once the layout has parsed.
+await page.waitForSelector('.sidebar-foot', { timeout: 20000 });
+const status = await page.textContent('.sidebar-foot');
 
 const failed = await page.$('.status.error');
 if (failed) {
@@ -51,12 +51,24 @@ const connections = await page.textContent('.detail .meta dd:last-of-type');
 await page.waitForTimeout(900); // let the focus animation settle before capture
 await page.screenshot({ path: OUT });
 
+// Navigate to Blast Radius. The selection must survive the route change, and
+// the canvas must NOT be rebuilt — that is the whole point of mounting it
+// above the router.
+await page.click('.nav a[href="#/blast"]');
+await page.waitForSelector('.blast', { timeout: 10000 });
+await page.waitForTimeout(700);
+const tally = (await page.textContent('.tally'))?.replace(/\s+/g, ' ').trim();
+const rings = await page.$$eval('.ring h3', (hs) => hs.map((h) => h.textContent.trim()));
+await page.screenshot({ path: 'blast.png' });
+
 await browser.close();
 
-console.log(`status bar : ${status.replace(/\s+/g, ' ').trim()}`);
+console.log(`sidebar    : ${status.replace(/\s+/g, ' ').trim()}`);
 console.log(`selected   : ${selected}`);
 console.log(`connections: ${connections}`);
-console.log(`screenshot : ${OUT}`);
+console.log(`blast      : ${tally}`);
+console.log(`rings      : ${rings.join(' | ')}`);
+console.log(`screenshots: ${OUT}, blast.png`);
 if (errors.length) {
   console.error(`\n${errors.length} console error(s):`);
   for (const e of errors.slice(0, 10)) console.error('  ' + e);
