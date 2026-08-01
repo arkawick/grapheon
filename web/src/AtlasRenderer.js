@@ -43,8 +43,22 @@ const EDGE_ALPHA_DIM = 0.03;
 const EDGE_ALPHA_HOT = 0.85;
 
 export class AtlasRenderer {
-  constructor(canvas) {
-    this.canvas = canvas;
+  /**
+   * Takes a CONTAINER element and creates its own canvas inside it, rather than
+   * being handed a shared one.
+   *
+   * React StrictMode mounts effects twice in dev, and destroy() cannot run
+   * until the first init() has resolved — so for a moment two Applications are
+   * initializing against the same element. Sharing a canvas there means the
+   * second one races the first for the WebGL context, which wedges the app in
+   * its loading state on some machines and not others. Owning the canvas makes
+   * instances fully independent, so the overlap is harmless.
+   */
+  constructor(container) {
+    this.container = container;
+    this.canvas = document.createElement('canvas');
+    this.canvas.style.display = 'block';
+    container.appendChild(this.canvas);
     this.app = null;
     this.viewport = null;
     this.nodes = [];
@@ -73,7 +87,7 @@ export class AtlasRenderer {
       canvas: this.canvas,
       background: BG,
       antialias: true,
-      resizeTo: this.canvas.parentElement,
+      resizeTo: this.container,
       resolution: window.devicePixelRatio || 1,
       autoDensity: true,
     });
@@ -331,5 +345,8 @@ export class AtlasRenderer {
 
   destroy() {
     this.app?.destroy(true, { children: true, texture: true });
+    this.app = null;
+    this.canvas?.remove();
+    this.canvas = null;
   }
 }

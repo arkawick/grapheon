@@ -13,7 +13,7 @@ const CORPUS = 'aeon';
 const EAGER_EDGE_LIMIT = 20000;
 
 export default function App() {
-  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
   const rendererRef = useRef(null);
   const adjacencyRef = useRef(null); // built once, on the first selection
   const edgesRef = useRef(null);     // set eagerly when the corpus is small
@@ -48,7 +48,7 @@ export default function App() {
           if (cancelled) return;
         }
 
-        renderer = new AtlasRenderer(canvasRef.current);
+        renderer = new AtlasRenderer(containerRef.current);
         await renderer.init(data, edges);
         if (cancelled) { renderer.destroy(); return; }
         rendererRef.current = renderer;
@@ -129,9 +129,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="canvas-wrap">
-        <canvas ref={canvasRef} />
-      </div>
+      <div className="canvas-wrap" ref={containerRef} />
 
       <header className="topbar">
         <div className="brand">
