@@ -46,12 +46,46 @@ for this 17 MB stress corpus, and **2–9 s for a typical 1–3 MB repo**. A rea
 device test still needs to happen before the Android bet is called safe;
 nothing here is that test.
 
-## What this does NOT validate
+## Part 2: the edge port (extract/)
 
-Entity **names** are the easy half. The port's real work is edges — call
-resolution, import linking, the `EXTRACTED`/`INFERRED` judgment — and this
-bench does not measure that. It proves the platform is viable, not that the
-port is done.
+The hard half — edges — was subsequently ported (`extract/src/extract.js`) and
+scored against the same ground truth on (source, target, relation) triples:
+
+```
+relation        truth   found  recall   ours  precision
+calls             241     232   96.3%    368     63.0%
+contains          324     324  100.0%    324    100.0%
+imports           155     155  100.0%    172     90.1%
+imports_from      203     199   98.0%    203     98.0%
+indirect_call      14       0    0.0%      0       n/a
+inherits           23      22   95.7%     23     95.7%
+method             57      57  100.0%     57    100.0%
+rationale_for     123     123  100.0%    123    100.0%
+references        198     195   98.5%    205     95.1%
+------------------------------------------------------------
+TOTAL recall: 1307/1338 (97.7%)
+```
+
+It took four scoring rounds, each decoding conventions graphify never
+documents: methods labelled with a leading dot; entity-level import edges only
+for symbols that are extracted entities; packages vs module files landing in
+different relations; calls to internal imports targeting the defining module
+but calls to external imports targeting file-scoped reference ids; stdlib calls
+getting no edge at all; decorators emitting both `references` and `calls`.
+
+Honest notes:
+- `indirect_call` (14 edges, all INFERRED) is deliberately not ported.
+- `calls` precision (63%) reflects graphify's own inconsistency as much as
+  over-generation — e.g. its `actions.py` decorators produce no calls edges
+  while its `ai.py` decorators do, on identical patterns. Our extras are
+  mostly plausible edges it fails to emit uniformly.
+- Scored on one corpus (Aeon). A second corpus would guard against
+  overfitting to graphify-on-Aeon quirks.
+
+Self-hosting proof: `node extract/node.mjs . --out data/grapheon/graph.json`
+then `node pipeline/build.js --name grapheon` — Grapheon extracts ITSELF and
+renders its own map (71 nodes, 9 communities, 149 ms), with zero Python in
+the chain.
 
 ## Reproduce
 

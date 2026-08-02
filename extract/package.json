@@ -1,0 +1,11 @@
+{
+  "name": "@grapheon/extract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "JS/WASM port of graphify's code extraction — emits graphify-shaped {nodes, links}",
+  "dependencies": {
+    "@vscode/tree-sitter-wasm": "^0.3.1",
+    "web-tree-sitter": "^0.26.11"
+  }
+}

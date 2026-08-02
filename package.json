@@ -4,6 +4,7 @@
   "private": true,
   "description": "Graph-native code intelligence. Graphify extracts, the Atlas renders.",
   "workspaces": [
+    "extract",
     "pipeline",
     "web"
   ],

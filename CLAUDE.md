@@ -139,15 +139,24 @@ Working: Atlas (map, search, kind filters, subsystem legend, click-to-select wit
 neighbourhood spotlight), Blast Radius (both directions, depth 1–6, path-certainty),
 sidebar shell. Production build verified serving statically.
 
-## WASM extraction (bench/)
+## JS extraction (extract/ + bench/)
 
-The kill-test for browser/Android extraction **passed** — see `bench/RESULTS.md`.
-web-tree-sitter + @vscode/tree-sitter-wasm (prebuilt grammars) hit **100%
-entity recall** vs graphify's ground truth at **8.3 ms/file in Chromium**.
-What remains unproven: edge extraction (call/import resolution — the actual
-hard part of a port) and real-device Android performance. The strategic point:
-extraction-in-JS makes Grapheon zero-install in a browser, and Android becomes
-a thin Capacitor shell over the same code rather than a separate bet.
+Extraction is fully ported to JS — see `bench/RESULTS.md` for both halves.
+Entities: **100% recall** at 8.3 ms/file in Chromium. Edges
+(`extract/src/extract.js`): **97.7% link recall** vs graphify's ground truth,
+with per-relation conventions decoded the hard way (documented in the file
+header — read it before touching resolution logic). `indirect_call` is
+deliberately not ported. The extractor emits graphify's exact raw shape, so
+the existing adapter and pipeline consume it unchanged:
+
+```bash
+node extract/node.mjs <repo> --out data/<name>/graph.json
+node pipeline/build.js --name <name>
+```
+
+Self-hosting works (Grapheon maps itself, zero Python). Still unproven:
+real-device Android performance, and fidelity on a second corpus — the scoring
+is against graphify-on-Aeon and may inherit its quirks.
 
 ## Known gaps
 
