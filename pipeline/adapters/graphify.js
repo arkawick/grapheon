@@ -52,11 +52,13 @@ const DEFAULT_RELATION_WEIGHT = 0.5;
 const INFERRED_FACTOR = 0.5;
 
 /**
- * @param {object} raw   parsed graphify-out/graph.json
- * @param {string} name  corpus name, e.g. "aeon"
+ * @param {object} raw    parsed graphify-out/graph.json (or anything emitting
+ *                        the same shape — the in-browser WASM extractor does)
+ * @param {string} name   corpus name, e.g. "aeon"
+ * @param {string} source what actually produced `raw`, for honest provenance
  * @returns {{meta: object, nodes: object[], edges: Array}}
  */
-function adapt(raw, name) {
+function adapt(raw, name, source = 'graphify') {
   // Graphify calls them `links`, not `edges`. Guard explicitly: a silent
   // undefined here produces an empty graph and a layout of 991 orphans.
   const links = raw.links;
@@ -113,7 +115,7 @@ function adapt(raw, name) {
 
   return {
     meta: {
-      source: 'graphify',
+      source,
       name,
       directed: raw.directed === true,
       generated_at: new Date().toISOString(),
@@ -128,4 +130,4 @@ function adapt(raw, name) {
   };
 }
 
-module.exports = { adapt, RELATION_WEIGHT, KIND_BY_FILE_TYPE };
+export { adapt, RELATION_WEIGHT, KIND_BY_FILE_TYPE };

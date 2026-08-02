@@ -2,8 +2,8 @@
   "name": "@grapheon/pipeline",
   "version": "0.1.0",
   "private": true,
-  "type": "commonjs",
-  "description": "extractor output -> canonical graph -> Louvain + ForceAtlas2 -> layout",
+  "type": "module",
+  "description": "extractor output -> canonical graph -> Louvain + ForceAtlas2 -> layout; ESM so the browser build can bundle it",
   "dependencies": {
     "graphology": "^0.25.4",
     "graphology-communities-louvain": "^2.0.2",

@@ -158,6 +158,21 @@ Self-hosting works (Grapheon maps itself, zero Python). Still unproven:
 real-device Android performance, and fidelity on a second corpus — the scoring
 is against graphify-on-Aeon and may inherit its quirks.
 
+**The same pipeline runs IN THE BROWSER** (`web/src/worker/extract-worker.js`):
+folder pick (sidebar) or `window.__loadRepoFiles(files, name)` → module Worker
+(WASM parse → adapt → FA2) → corpus swap. `pipeline/` is ESM for this reason.
+Gotchas that cost time here:
+- Vite workers need `worker: { format: 'es' }` or the production build dies
+  with "IIFE not supported for code-splitting builds" — dev works, build fails.
+- A worker that fails to LOAD posts nothing: without `worker.onerror` the UI
+  hangs on "starting" with zero diagnostics anywhere.
+- Workspace deps must be declared where they're IMPORTED FROM: web's worker
+  imports web-tree-sitter, so web/package.json declares it. A package installed
+  standalone before joining the workspace never got hoisted (500 from Vite,
+  "Failed to resolve import").
+- WASM binaries reach the bundle via `?url` imports; `server.fs.allow: ['..']`
+  lets dev serve `extract/` and `pipeline/` source directly.
+
 ## Known gaps
 
 - **`CORPUS` is hardcoded to `'aeon'`** in `App.jsx`. Multi-corpus is the next feature;

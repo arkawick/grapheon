@@ -12,10 +12,12 @@
  * it is the seam: swapping extractors means writing one adapter, and having the
  * intermediate on disk is what makes that claim checkable rather than aspirational.
  */
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
-const { build } = require('./layout');
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { build } from './layout.js';
+import * as graphifyAdapter from './adapters/graphify.js';
 
 /**
  * Identifies a build by its INPUTS, so two reproducible runs produce the same
@@ -37,10 +39,10 @@ function buildId(canonical, iterations, seed) {
 }
 
 const ADAPTERS = {
-  graphify: require('./adapters/graphify'),
+  graphify: graphifyAdapter,
 };
 
-const ROOT = path.join(__dirname, '..');
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function arg(flag, fallback) {
   const a = process.argv.slice(2);

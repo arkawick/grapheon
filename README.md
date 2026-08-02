@@ -61,6 +61,18 @@ and never runs physics.
 It also means **no backend**: the app loads static JSON, so the whole thing
 deploys to any static host.
 
+## Zero-install: open a repo in the browser
+
+The sidebar's **Open a repo…** picks a local folder and runs the whole
+pipeline client-side — WASM tree-sitter parse, adapt, Louvain, ForceAtlas2 —
+in a Web Worker, then swaps the map in place. Nothing is uploaded anywhere;
+there is no server to upload to. The same flow works in the production build
+(the WASM grammars ship as static assets), which is what makes Grapheon
+deployable as a plain static site that can still ingest new repos.
+
+Automation/console entry point: `window.__loadRepoFiles([{path, src}], name)`
+drives the identical code path minus the picker.
+
 ## Pages
 
 **Atlas** — the map. Search over labels and paths, filter by kind, jump to a

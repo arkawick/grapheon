@@ -11,9 +11,29 @@
  * reads as a failure. Trust the screenshot.
  */
 import { chromium } from 'playwright';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, extname, relative } from 'node:path';
 
 const URL = process.env.GRAPHEON_URL || 'http://localhost:5180';
 const OUT = 'atlas.png';
+
+// A small real corpus for the in-browser extraction check: this repo itself.
+const REPO = join(process.cwd(), '..');
+const SKIP = new Set(['.git', 'node_modules', 'dist', 'data', 'bench']);
+function* walk(dir) {
+  for (const name of readdirSync(dir)) {
+    if (SKIP.has(name)) continue;
+    const p = join(dir, name);
+    let st;
+    try { st = statSync(p); } catch { continue; }
+    if (st.isDirectory()) yield* walk(p);
+    else if (['.py', '.js', '.jsx'].includes(extname(p))) yield p;
+  }
+}
+const repoFiles = [...walk(REPO)].map((p) => ({
+  path: relative(REPO, p).replaceAll('\\', '/'),
+  src: readFileSync(p, 'utf8'),
+}));
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1600, height: 950 } });
@@ -61,6 +81,22 @@ const tally = (await page.textContent('.tally'))?.replace(/\s+/g, ' ').trim();
 const rings = await page.$$eval('.ring h3', (hs) => hs.map((h) => h.textContent.trim()));
 await page.screenshot({ path: 'blast.png' });
 
+// --- in-browser extraction: the whole pipeline in a worker -----------------
+// Drives the exact code path the folder picker uses, minus the picker.
+await page.click('.nav a[href="#/"]');
+await page.evaluate(
+  ({ files }) => window.__loadRepoFiles(files, 'grapheon-self'),
+  { files: repoFiles }
+);
+// The corpus badge flips when the worker's layout replaces the default one.
+await page.waitForFunction(
+  () => document.querySelector('.corpus')?.textContent === 'grapheon-self',
+  { timeout: 60000 }
+);
+await page.waitForTimeout(800); // let the fresh map settle
+const selfStats = (await page.textContent('.sidebar-foot')).replace(/\s+/g, ' ').trim();
+await page.screenshot({ path: 'browser-extract.png' });
+
 await browser.close();
 
 console.log(`sidebar    : ${status.replace(/\s+/g, ' ').trim()}`);
@@ -68,7 +104,8 @@ console.log(`selected   : ${selected}`);
 console.log(`connections: ${connections}`);
 console.log(`blast      : ${tally}`);
 console.log(`rings      : ${rings.join(' | ')}`);
-console.log(`screenshots: ${OUT}, blast.png`);
+console.log(`self-map   : ${selfStats} (${repoFiles.length} files extracted in-browser)`);
+console.log(`screenshots: ${OUT}, blast.png, browser-extract.png`);
 if (errors.length) {
   console.error(`\n${errors.length} console error(s):`);
   for (const e of errors.slice(0, 10)) console.error('  ' + e);

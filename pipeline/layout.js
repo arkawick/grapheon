@@ -12,9 +12,9 @@
  * best implementation available at this size; rewriting it in Python would be
  * a downgrade for no gain.
  */
-const Graph = require('graphology');
-const louvain = require('graphology-communities-louvain');
-const forceAtlas2 = require('graphology-layout-forceatlas2');
+import Graph from 'graphology';
+import louvain from 'graphology-communities-louvain';
+import forceAtlas2 from 'graphology-layout-forceatlas2';
 
 /**
  * The world box scales with node count so that DENSITY stays constant across
@@ -280,4 +280,4 @@ function build(canonical, { iterations = 600, log = () => {}, fa2 = {}, seed = 1
   };
 }
 
-module.exports = { build, worldSize };
+export { build, worldSize };
