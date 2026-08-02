@@ -173,6 +173,20 @@ Gotchas that cost time here:
 - WASM binaries reach the bundle via `?url` imports; `server.fs.allow: ['..']`
   lets dev serve `extract/` and `pipeline/` source directly.
 
+**Android** (`web/android/`, Capacitor 8): a shell around the same dist.
+`npm run build && npx cap sync android && cd android && gradlew assembleDebug`
+(JAVA_HOME -> JDK 21 at `C:/Program Files/Java/jdk-21`, ANDROID_HOME ->
+`%LOCALAPPDATA%/Android/Sdk`). Gotchas:
+- **Mobile has NO `webkitdirectory`** — the folder picker silently degrades to
+  a file picker on Android. The zip path (`filesFromZip`, fflate) is the only
+  working mobile ingestion; the sidebar hides the folder button on touch.
+- **`cap sync` copies the BUILT dist into `android/app/src/main/assets/public`**
+  — megabytes of minified one-line JS *inside the repo tree*. Any corpus walk
+  that doesn't skip `android/` feeds bundles back into the parser and stalls
+  for tens of seconds (bit `_drive.mjs`). `corpus.js` now also has a
+  `looksMinified` guard (>400 chars/line average) for exactly this class of file.
+- The synced assets are gitignored; the android/ project itself is committed.
+
 ## Known gaps
 
 - **`CORPUS` is hardcoded to `'aeon'`** in `App.jsx`. Multi-corpus is the next feature;

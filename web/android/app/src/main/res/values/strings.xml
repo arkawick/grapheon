@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Grapheon</string>
+    <string name="title_activity_main">Grapheon</string>
+    <string name="package_name">app.grapheon</string>
+    <string name="custom_url_scheme">app.grapheon</string>
+</resources>

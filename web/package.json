@@ -8,10 +8,14 @@
     "build": "vite build",
     "preview": "vite preview",
     "drive": "node _drive.mjs",
-    "test": "node --test src/lib/blast.test.js"
+    "test": "node --test src/lib/blast.test.js src/lib/corpus.test.js"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "@vscode/tree-sitter-wasm": "^0.3.1",
+    "fflate": "^0.8.3",
     "graphology": "^0.25.4",
     "graphology-communities-louvain": "^2.0.2",
     "graphology-layout-forceatlas2": "^0.10.1",

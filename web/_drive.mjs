@@ -19,7 +19,10 @@ const OUT = 'atlas.png';
 
 // A small real corpus for the in-browser extraction check: this repo itself.
 const REPO = join(process.cwd(), '..');
-const SKIP = new Set(['.git', 'node_modules', 'dist', 'data', 'bench']);
+// `android` matters: Capacitor syncs the BUILT dist (megabytes of minified
+// one-line JS) into android/app/src/main/assets, and feeding that back into
+// the parser stalls the whole check.
+const SKIP = new Set(['.git', 'node_modules', 'dist', 'data', 'bench', 'android']);
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
     if (SKIP.has(name)) continue;

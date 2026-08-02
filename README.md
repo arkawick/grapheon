@@ -73,6 +73,25 @@ deployable as a plain static site that can still ingest new repos.
 Automation/console entry point: `window.__loadRepoFiles([{path, src}], name)`
 drives the identical code path minus the picker.
 
+**On a phone there is no folder picker** — mobile WebViews don't implement
+`webkitdirectory` — so the mobile path is **Open a repo .zip…** (GitHub →
+Code → Download ZIP feeds it directly). Zips are unpacked client-side with
+fflate; the same filters apply, plus a minified-file guard.
+
+## Android (Capacitor)
+
+`web/android/` is a Capacitor shell around the same `dist/`:
+
+```bash
+npm run build                     # build the web app
+cd web && npx cap sync android    # copy dist into the android project
+cd android && ./gradlew assembleDebug   # needs JDK 17+ and the Android SDK
+```
+
+APK lands in `web/android/app/build/outputs/apk/debug/`. The app is the
+static site verbatim — extraction runs in the WebView's worker, on-device,
+offline.
+
 ## Pages
 
 **Atlas** — the map. Search over labels and paths, filter by kind, jump to a

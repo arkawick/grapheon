@@ -1,7 +1,15 @@
 import { useRef } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useGraph } from '../GraphContext.js';
-import { filesFromFileList, repoNameFromFileList } from '../lib/corpus.js';
+import {
+  filesFromFileList, repoNameFromFileList,
+  filesFromZip, repoNameFromZip,
+} from '../lib/corpus.js';
+
+// Android WebViews (and mobile browsers generally) have no directory picker —
+// webkitdirectory silently opens a FILE picker instead. On touch devices the
+// zip path is the only one that works, so it leads.
+const HAS_DIR_PICKER = !('ontouchstart' in window) || navigator.maxTouchPoints === 0;
 
 const NAV = [
   { to: '/', label: 'Atlas', hint: 'the map' },
@@ -11,6 +19,7 @@ const NAV = [
 export default function Sidebar() {
   const { layout, corpusName, extractRepo, busy } = useGraph();
   const pickerRef = useRef(null);
+  const zipRef = useRef(null);
 
   const onPick = async (e) => {
     const fileList = e.target.files;
@@ -19,6 +28,13 @@ export default function Sidebar() {
     const files = await filesFromFileList(fileList);
     e.target.value = ''; // allow re-picking the same folder
     extractRepo(files, name);
+  };
+
+  const onZip = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    extractRepo(await filesFromZip(file), repoNameFromZip(file));
   };
 
   return (
@@ -40,16 +56,23 @@ export default function Sidebar() {
       </ul>
 
       <div className="open-repo">
-        <button disabled={!!busy} onClick={() => pickerRef.current?.click()}>
-          {busy ? 'Extracting…' : 'Open a repo…'}
+        {HAS_DIR_PICKER && (
+          <button disabled={!!busy} onClick={() => pickerRef.current?.click()}>
+            {busy ? 'Extracting…' : 'Open a repo…'}
+          </button>
+        )}
+        <button className="alt" disabled={!!busy} onClick={() => zipRef.current?.click()}>
+          {busy && !HAS_DIR_PICKER ? 'Extracting…' : 'Open a repo .zip…'}
         </button>
         <div className="nav-hint">
-          Parsed in your browser. Nothing is uploaded anywhere.
+          Parsed on this device. Nothing is uploaded anywhere.
+          {!HAS_DIR_PICKER && ' Tip: GitHub → Code → Download ZIP.'}
         </div>
         {/*
-          webkitdirectory is non-standard but universal in practice; it is the
+          webkitdirectory is non-standard but universal on desktop; it is the
           only folder picker that works without a backend. File System Access
-          API would be nicer but is Chromium-only.
+          API would be nicer but is Chromium-only. Neither exists on mobile,
+          hence the zip input.
         */}
         <input
           ref={pickerRef}
@@ -58,6 +81,13 @@ export default function Sidebar() {
           multiple
           style={{ display: 'none' }}
           onChange={onPick}
+        />
+        <input
+          ref={zipRef}
+          type="file"
+          accept=".zip,application/zip"
+          style={{ display: 'none' }}
+          onChange={onZip}
         />
       </div>
 
