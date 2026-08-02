@@ -111,6 +111,13 @@ cheap one. The browser receives coordinates and **never runs physics**.
   nothing about whether the layout is any good.
 - **`node --test <dir>` fails** with MODULE_NOT_FOUND on Node 22 here; point it at the
   file (`node --test src/lib/blast.test.js`).
+- **graphify labels methods with a leading dot** (`.connect()`) while functions
+  are bare (`connect()`). Any name comparison against its output must strip
+  both the dot and the `()` — this artifact alone turned a true 100% recall
+  into an apparent 82.5% in the WASM kill-test.
+- **npm workspaces hoist devDependencies to the repo root** — `playwright`
+  lives in `node_modules/`, not `web/node_modules/`. Scripts outside the
+  workspaces (e.g. `bench/`) must import from the root.
 - **Blast Radius direction is easy to invert.** `'in'` follows edges pointing AT the
   root = dependents = "what breaks if I change this". `'out'` = dependencies. The
   adjacency stores both directions per edge; the tests pin the convention.
@@ -131,6 +138,16 @@ recovers the real architecture (`api.js`, `graph.py`, `blast_radius_service.py`,
 Working: Atlas (map, search, kind filters, subsystem legend, click-to-select with
 neighbourhood spotlight), Blast Radius (both directions, depth 1–6, path-certainty),
 sidebar shell. Production build verified serving statically.
+
+## WASM extraction (bench/)
+
+The kill-test for browser/Android extraction **passed** — see `bench/RESULTS.md`.
+web-tree-sitter + @vscode/tree-sitter-wasm (prebuilt grammars) hit **100%
+entity recall** vs graphify's ground truth at **8.3 ms/file in Chromium**.
+What remains unproven: edge extraction (call/import resolution — the actual
+hard part of a port) and real-device Android performance. The strategic point:
+extraction-in-JS makes Grapheon zero-install in a browser, and Android becomes
+a thin Capacitor shell over the same code rather than a separate bet.
 
 ## Known gaps
 

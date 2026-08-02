@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>grapheon wasm bench</title></head>
+<body>
+<pre id="out">running…</pre>
+<script type="module">
+/**
+ * Browser half of the kill-test: identical parse over corpus.json, but with
+ * real WASM fetch + instantiation and browser memory pressure. Results land in
+ * #out and window.__result for Playwright to scrape.
+ */
+import { Parser, Language, Query } from './node_modules/web-tree-sitter/web-tree-sitter.js';
+
+const QUERIES = {
+  '.py': ['tree-sitter-python.wasm', `
+    (function_definition name: (identifier) @entity)
+    (class_definition name: (identifier) @entity)
+  `],
+  '.js': ['tree-sitter-javascript.wasm', `
+    (function_declaration name: (identifier) @entity)
+    (class_declaration name: (identifier) @entity)
+    (method_definition name: (property_identifier) @entity)
+    (variable_declarator name: (identifier) @entity value: (arrow_function))
+    (variable_declarator name: (identifier) @entity value: (function_expression))
+  `],
+};
+QUERIES['.jsx'] = QUERIES['.js'];
+
+const out = (s) => { document.getElementById('out').textContent = s; };
+
+try {
+  const tInit0 = performance.now();
+  await Parser.init({
+    locateFile: (f) => `./node_modules/web-tree-sitter/${f}`,
+  });
+  const langs = {}, queries = {};
+  for (const [ext, [wasm, q]] of Object.entries(QUERIES)) {
+    if (!langs[wasm]) {
+      langs[wasm] = await Language.load(`./node_modules/@vscode/tree-sitter-wasm/wasm/${wasm}`);
+      queries[wasm] = new Query(langs[wasm], q);
+    }
+  }
+  const initMs = performance.now() - tInit0;
+
+  const corpus = await (await fetch('./corpus.json')).json();
+
+  const parser = new Parser();
+  let entities = 0, bytes = 0;
+  const t0 = performance.now();
+  for (const f of corpus) {
+    const [wasm] = QUERIES[f.ext];
+    parser.setLanguage(langs[wasm]);
+    const tree = parser.parse(f.src);
+    entities += queries[wasm].captures(tree.rootNode).length;
+    tree.delete();
+    bytes += f.src.length;
+  }
+  const parseMs = performance.now() - t0;
+
+  const result = {
+    ok: true,
+    files: corpus.length,
+    mb: +(bytes / 1e6).toFixed(1),
+    initMs: Math.round(initMs),
+    parseMs: Math.round(parseMs),
+    perFileMs: +(parseMs / corpus.length).toFixed(1),
+    entities,
+  };
+  window.__result = result;
+  out(JSON.stringify(result, null, 2));
+} catch (err) {
+  window.__result = { ok: false, error: String(err) };
+  out('FAIL: ' + err);
+}
+</script>
+</body>
+</html>

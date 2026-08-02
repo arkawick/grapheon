@@ -1,0 +1,10 @@
+{
+  "name": "grapheon-bench",
+  "private": true,
+  "type": "module",
+  "description": "Kill-test: web-tree-sitter (WASM) vs graphify's Python CLI on identical input",
+  "dependencies": {
+    "@vscode/tree-sitter-wasm": "^0.3.1",
+    "web-tree-sitter": "^0.26.11"
+  }
+}
