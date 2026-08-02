@@ -1,5 +1,5 @@
 {
   "appId": "app.grapheon",
   "appName": "Grapheon",
-  "webDir": "dist"
+  "webDir": "web/dist"
 }

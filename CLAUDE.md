@@ -10,30 +10,43 @@ layout pass from Project-Kagami's Atlas, the feature vocabulary from Project-Aeo
 **The property worth protecting is that it runs on any repo with no infrastructure** —
 no backend, no database, no API key. Do not trade that away casually.
 
-## Stack
+## Stack & layout
 
-- **pipeline/** — Node, CommonJS. graphology + Louvain + ForceAtlas2. No browser code.
+- **extract/** — the JS/WASM extraction port (web-tree-sitter). ESM, pure core,
+  runs identically in Node and a browser Worker.
+- **pipeline/** — ESM. graphology + Louvain + ForceAtlas2. No browser-only code,
+  but the browser bundles it (that is WHY it is ESM).
 - **web/** — Vite + React 18 + PixiJS 8 + pixi-viewport. Static; no server calls.
-- npm workspaces. Node 22. **No Docker, no Python** (beyond the Graphify CLI itself).
+- **android/** — Capacitor 8 shell around `web/dist`; deliberately at the ROOT,
+  fully separated from web/. Release builds happen in Docker (`android/docker/`).
+- **bench/** — the measured evidence (RESULTS.md) behind the JS port.
+- npm workspaces (extract, pipeline, web). Node 22. Capacitor config at repo
+  root (`capacitor.config.json`, webDir `web/dist`); @capacitor/* are root
+  devDependencies. **No Python needed anywhere**; the graphify CLI is optional.
 
 ## Running it
 
 ```bash
-graphify update <repo> --no-cluster        # AST extract, deterministic, no LLM
-cp <repo>/graphify-out/graph.json data/<name>/graph.json
 npm install
+node extract/node.mjs <repo> --out data/<name>/graph.json   # JS extractor
 npm run build:graph -- --name <name>       # adapt + Louvain + FA2
 npm run dev                                # http://localhost:5180
 
-npm test                                   # blast.js unit tests
-npm run drive --workspace web              # Playwright screenshot + console check
+npm test                                   # blast.js + corpus.js unit tests
+npm run drive --workspace web              # Playwright: desktop + mobile pass
+npm run sync:android                       # web build + capacitor sync
 ```
+
+The graphify CLI route (`graphify update <repo> --no-cluster`, copy
+graphify-out/graph.json into data/<name>/) still works and is the fidelity
+reference the JS extractor is scored against.
 
 ## The three passes
 
 ```
-graphify update  ->  graph.json  ->  graph.canonical.json  ->  <name>.layout.json  ->  browser
-                    (raw)          (adapters/)             (layout.js)          (AtlasRenderer)
+extract (Node CLI | browser Worker | graphify CLI)
+      -> graph.json -> graph.canonical.json -> <name>.layout.json -> browser
+        (raw)         (adapters/)            (layout.js)         (AtlasRenderer)
 ```
 
 `docs/CONTRACT.md` specifies both intermediate files. **The extractor is pluggable**:
@@ -137,7 +150,11 @@ recovers the real architecture (`api.js`, `graph.py`, `blast_radius_service.py`,
 
 Working: Atlas (map, search, kind filters, subsystem legend, click-to-select with
 neighbourhood spotlight), Blast Radius (both directions, depth 1–6, path-certainty),
-sidebar shell. Production build verified serving statically.
+sidebar shell, **in-browser extraction** (folder pick on desktop, zip on mobile,
+Worker-based), **responsive phone UI** (top bar, bottom sheets, legend toggle —
+asserted by the drive's mobile pass at 390x844/touch), and a **debug APK** built
+and content-verified. Production build verified serving statically. 15 unit
+tests; the drive checks desktop + mobile + in-browser extraction on every run.
 
 ## JS extraction (extract/ + bench/)
 
@@ -173,8 +190,14 @@ Gotchas that cost time here:
 - WASM binaries reach the bundle via `?url` imports; `server.fs.allow: ['..']`
   lets dev serve `extract/` and `pipeline/` source directly.
 
-**Android** (`web/android/`, Capacitor 8): a shell around the same dist.
-`npm run build && npx cap sync android && cd android && gradlew assembleDebug`
+**Android** (`android/` at the ROOT — deliberately separated from `web/`;
+Capacitor 8, config at repo root, webDir `web/dist`). The release build runs
+in Docker: `./android/docker-build.sh` (toolchain image: Node 22 + Temurin 21
++ SDK 36; repo volume-mounted so the keystore never enters an image layer).
+Signing reads `android/keystore.properties` -> `android/keystore/` (both
+gitignored — losing them loses the app identity; absent, release builds come
+out unsigned instead of failing). Host debug path still works:
+`npm run sync:android && cd android && gradlew assembleDebug`
 (JAVA_HOME -> JDK 21 at `C:/Program Files/Java/jdk-21`, ANDROID_HOME ->
 `%LOCALAPPDATA%/Android/Sdk`). Gotchas:
 - **Mobile has NO `webkitdirectory`** — the folder picker silently degrades to
@@ -183,9 +206,42 @@ Gotchas that cost time here:
 - **`cap sync` copies the BUILT dist into `android/app/src/main/assets/public`**
   — megabytes of minified one-line JS *inside the repo tree*. Any corpus walk
   that doesn't skip `android/` feeds bundles back into the parser and stalls
-  for tens of seconds (bit `_drive.mjs`). `corpus.js` now also has a
-  `looksMinified` guard (>400 chars/line average) for exactly this class of file.
+  for tens of seconds (bit `_drive.mjs`, then would have bit `extract/node.mjs`).
+  `corpus.js` also has a `looksMinified` guard (>400 chars/line average).
 - The synced assets are gitignored; the android/ project itself is committed.
+- **A running Vite dev server holds watcher handles on the whole `web/` tree**
+  — moving `web/android` out failed with "Device or resource busy" until every
+  vite process (including one orphaned from a killed npm wrapper a day earlier)
+  was found BY LISTENING PORT and killed. Don't kill node.exe blindly: Claude
+  Code itself runs on node.
+- **Docker Desktop's engine can be up-but-wedged** — processes running since
+  days ago, WSL distro "Running", yet every `docker` CLI call hangs forever.
+  Fix: kill Docker Desktop + com.docker.backend, `wsl -t docker-desktop`,
+  relaunch. Do NOT `wsl --shutdown` (kills the user's Ubuntu distro too).
+
+## IN FLIGHT: signed Android release (resume here)
+
+Where this stands as of 2026-08-02:
+
+- **Done & verified**: android/ separated to root (git renames), capacitor
+  config at root, `npx cap sync android` works from root, web app fully green
+  after the move (drive: desktop + mobile + in-browser extraction).
+- **Done, NOT yet verified**: release signing. The keystore was GENERATED
+  (`android/keystore/grapheon-release.keystore`, alias `grapheon`, random
+  password in `android/keystore.properties`; both gitignored — **tell the user
+  to back these two files up**, they are the app identity). `app/build.gradle`
+  signs release builds when keystore.properties exists, silently skips
+  signing when absent.
+- **Broken**: the Docker toolchain image build
+  (`docker build -t grapheon-android-build android/docker`) failed at the
+  sdkmanager RUN step, exit 1, error invisible because the step piped to
+  /dev/null — that suppression is now removed, so re-running will show the
+  real error. Suspects: sdkmanager/JDK interaction, or a licenses prompt.
+- **Next actions**: (1) re-run the image build and read the actual error,
+  (2) `./android/docker-build.sh` for the signed APK,
+  (3) verify the signature (`apksigner verify --print-certs` from
+  build-tools, or `jarsigner -verify`),
+  (4) the debug-APK-on-real-phone perf test is still owed.
 
 ## Known gaps
 

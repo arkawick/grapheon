@@ -12,6 +12,12 @@
     "build:graph": "node pipeline/build.js",
     "dev": "npm run dev --workspace web",
     "build": "npm run build --workspace web",
-    "test": "npm run test --workspace web"
+    "test": "npm run test --workspace web",
+    "sync:android": "npm run build && cap sync android"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0"
   }
 }

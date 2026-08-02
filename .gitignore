@@ -26,5 +26,10 @@ extract/graph.extracted.json
 # Capacitor syncs the BUILT web app into the android project — pure build
 # artifact, recreated by `npx cap sync android`. (The android/ project itself
 # IS committed; it's source.)
-web/android/app/src/main/assets/public/
-web/android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+
+# Release signing material. NEVER commit a keystore or its passwords; losing
+# them means losing the app identity, leaking them means losing the app.
+android/keystore/
+android/keystore.properties

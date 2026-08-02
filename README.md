@@ -10,20 +10,44 @@ Named for its two parents: **graph** + **aeon**. The extraction layer comes from
 [Graphify](https://github.com/Graphify-Labs/graphify); the renderer is ported
 from Project-Kagami's Atlas; the feature vocabulary comes from Project-Aeon.
 
+## Layout
+
+```
+extract/    JS/WASM port of graphify's extraction (runs in Node AND browser)
+pipeline/   canonical graph -> Louvain -> ForceAtlas2 -> layout artifacts
+web/        the desktop/browser app: Vite + React + PixiJS. No backend.
+android/    the phone app: a Capacitor shell around web/dist, built in Docker
+bench/      the kill-test evidence (RESULTS.md) that justified the JS port
+data/       one directory per extracted corpus
+docs/       CONTRACT.md — the two JSON shapes everything meets at
+```
+
+Desktop and Android are deliberately separated: `web/` never references
+`android/`, and the only thing crossing the boundary is `web/dist`, copied in
+by `npx cap sync android` (config at the repo root, `capacitor.config.json`).
+
 ## Run it
 
 ```bash
-# 1. extract (deterministic, local, no API key, no LLM credits)
-graphify update ../Project-Aeon --no-cluster
-cp ../Project-Aeon/graphify-out/graph.json data/aeon/graph.json
+npm install
+
+# 1. extract — the JS/WASM extractor, no Python, no API key
+node extract/node.mjs ../some-repo --out data/somerepo/graph.json
 
 # 2. adapt + lay out
-npm install
-npm run build:graph -- --name aeon
+npm run build:graph -- --name somerepo
 
 # 3. serve
 npm run dev            # http://localhost:5180
 ```
+
+(The original Python route still works and produces the same shape:
+`graphify update <repo> --no-cluster`, then copy `graphify-out/graph.json`
+into `data/<name>/`. The JS extractor scores 97.7% link recall against it —
+`bench/RESULTS.md` has the full comparison.)
+
+Or skip the CLI entirely: `npm run dev`, then **Open a repo…** in the sidebar
+extracts in the browser.
 
 Verify it:
 
@@ -78,19 +102,32 @@ drives the identical code path minus the picker.
 Code → Download ZIP feeds it directly). Zips are unpacked client-side with
 fflate; the same filters apply, plus a minified-file guard.
 
-## Android (Capacitor)
+## Android (Capacitor, built in Docker)
 
-`web/android/` is a Capacitor shell around the same `dist/`:
+`android/` is a Capacitor shell around the same `web/dist`. The release build
+runs **inside Docker** — the image carries the whole toolchain (Node 22,
+Temurin JDK 21, Android SDK 36), so nothing Android-related needs installing
+on the host:
 
 ```bash
-npm run build                     # build the web app
-cd web && npx cap sync android    # copy dist into the android project
-cd android && ./gradlew assembleDebug   # needs JDK 17+ and the Android SDK
+./android/docker-build.sh
+# -> android/app/build/outputs/apk/release/app-release.apk  (signed)
 ```
 
-APK lands in `web/android/app/build/outputs/apk/debug/`. The app is the
-static site verbatim — extraction runs in the WebView's worker, on-device,
-offline.
+The repo is volume-mounted into the container, which is what keeps the
+keystore out of image layers — signing material is never baked into anything
+that could be pushed.
+
+**Signing** reads `android/keystore.properties` (gitignored) pointing at
+`android/keystore/` (gitignored). Without them, release builds come out
+unsigned rather than failing. **Back both files up somewhere safe** — losing
+the keystore means losing the app identity for updates.
+
+Debug builds on the host still work if you have a JDK + SDK:
+`npm run sync:android && cd android && ./gradlew assembleDebug`.
+
+The app is the static site verbatim — extraction runs in the WebView's
+worker, on-device, offline.
 
 ## Pages
 
@@ -121,10 +158,22 @@ architecture without being told anything about it.
 Blast Radius on `aeon/frontend/src/lib/api.js` returns the real dependency
 chain: all 10 pages that import it, then `App.jsx` at 2 hops, `main.jsx` at 3.
 
-Production build verified serving statically — 470 KB JS (144 KB gzip) plus
-363 KB of data, no backend.
+Production build verified serving statically — ~470 KB JS (145 KB gzip) plus
+363 KB of data, no backend. The same build runs in-browser extraction (WASM
+grammars ship as assets) and is what the Android shell wraps: a debug APK is
+built and verified, with a responsive phone UI checked by Playwright at
+390x844 with touch on every drive run.
 
-Not built yet: multi-corpus, the agent layer, Neo4j push, and the Kagami adapter.
+Not built yet: multi-corpus UI, the agent layer, Neo4j push, and the Kagami
+adapter.
+
+**In flight — signed Android release.** The keystore exists
+(`android/keystore/` + `android/keystore.properties`, both gitignored —
+**back them up**; losing them loses the app identity), gradle signs when they
+are present, and the Docker toolchain image (`android/docker/`) is written but
+its first build failed at the SDK-install step with the error swallowed by a
+`> /dev/null` (since removed, so the next run will say what's wrong). Resume
+with: `./android/docker-build.sh`.
 
 ## Known rough edges
 

@@ -15,7 +15,10 @@ import { extractCorpus } from './src/extract.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const WASM = join(HERE, 'node_modules', '@vscode', 'tree-sitter-wasm', 'wasm');
-const SKIP = new Set(['.git', 'node_modules', 'graphify-out', '__pycache__', 'dist', '.venv', 'venv']);
+// `android` matters here too: cap sync copies the built dist (minified
+// one-line bundles) into android/app/src/main/assets, and parsing those
+// stalls the extractor — the same trap that bit the Playwright drive.
+const SKIP = new Set(['.git', 'node_modules', 'graphify-out', '__pycache__', 'dist', '.venv', 'venv', 'android']);
 const EXTS = { '.py': 'tree-sitter-python.wasm', '.js': 'tree-sitter-javascript.wasm', '.jsx': 'tree-sitter-javascript.wasm' };
 
 const root = process.argv[2];
