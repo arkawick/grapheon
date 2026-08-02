@@ -2,7 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- user-scalable=no: page-level pinch would fight the map's own pinch
+         zoom (pixi-viewport). Standard trade for canvas-map apps. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Grapheon</title>
   </head>
   <body>

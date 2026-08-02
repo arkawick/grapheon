@@ -100,6 +100,44 @@ await page.waitForTimeout(800); // let the fresh map settle
 const selfStats = (await page.textContent('.sidebar-foot')).replace(/\s+/g, ' ').trim();
 await page.screenshot({ path: 'browser-extract.png' });
 
+// --- mobile pass: phone viewport, touch --------------------------------------
+// hasTouch flips HAS_DIR_PICKER, so this also exercises the zip-only sidebar
+// branch the Android shell ships with.
+const mob = await browser.newContext({
+  viewport: { width: 390, height: 844 },
+  hasTouch: true,
+  isMobile: true,
+});
+const mpage = await mob.newPage();
+mpage.on('console', (m) => { if (m.type() === 'error') errors.push('[mobile] ' + m.text()); });
+mpage.on('pageerror', (e) => errors.push('[mobile] ' + String(e)));
+await mpage.goto(URL, { waitUntil: 'networkidle' });
+await mpage.waitForSelector('.corpus', { timeout: 20000 }); // foot is hidden on mobile
+await mpage.waitForTimeout(600);
+
+const folderBtnCount = await mpage.$$eval('.open-repo button:not(.alt)', (b) => b.length);
+const zipBtnCount = await mpage.$$eval('.open-repo button.alt', (b) => b.length);
+await mpage.screenshot({ path: 'mobile-atlas.png' });
+
+// Legend opens from its toggle, picking a subsystem closes it and selects.
+await mpage.tap('.legend-toggle');
+await mpage.waitForSelector('.legend.open', { timeout: 5000 });
+await mpage.tap('.communities button');
+await mpage.waitForSelector('.detail', { timeout: 10000 });
+await mpage.waitForTimeout(700);
+await mpage.screenshot({ path: 'mobile-detail.png' });
+
+// Blast page renders as a bottom sheet.
+await mpage.tap('.nav a[href="#/blast"]');
+await mpage.waitForSelector('.blast', { timeout: 10000 });
+const sheet = await mpage.$eval('.blast', (el) => {
+  const r = el.getBoundingClientRect();
+  return { top: Math.round(r.top), width: Math.round(r.width) };
+});
+await mpage.waitForTimeout(500);
+await mpage.screenshot({ path: 'mobile-blast.png' });
+await mob.close();
+
 await browser.close();
 
 console.log(`sidebar    : ${status.replace(/\s+/g, ' ').trim()}`);
@@ -108,7 +146,8 @@ console.log(`connections: ${connections}`);
 console.log(`blast      : ${tally}`);
 console.log(`rings      : ${rings.join(' | ')}`);
 console.log(`self-map   : ${selfStats} (${repoFiles.length} files extracted in-browser)`);
-console.log(`screenshots: ${OUT}, blast.png, browser-extract.png`);
+console.log(`mobile     : folder-btn=${folderBtnCount} (want 0) zip-btn=${zipBtnCount} (want 1); blast sheet top=${sheet.top}px width=${sheet.width}px`);
+console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, mobile-{atlas,detail,blast}.png`);
 if (errors.length) {
   console.error(`\n${errors.length} console error(s):`);
   for (const e of errors.slice(0, 10)) console.error('  ' + e);
