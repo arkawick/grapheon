@@ -17,16 +17,35 @@ extract/    JS/WASM port of graphify's extraction (runs in Node AND browser)
 pipeline/   canonical graph -> Louvain -> ForceAtlas2 -> layout artifacts
 web/        the desktop/browser app: Vite + React + PixiJS. No backend.
 android/    the phone app: a Capacitor shell around web/dist, built in Docker
+docker/     Dockerfile + nginx.conf for the web app (see docker-compose.yml)
 bench/      the kill-test evidence (RESULTS.md) that justified the JS port
 data/       one directory per extracted corpus
 docs/       CONTRACT.md — the two JSON shapes everything meets at
 ```
+
+Two independent Docker setups, on purpose: `docker/` builds and serves the web
+app; `android/docker/` is a toolchain image that produces an APK. They share
+nothing.
 
 Desktop and Android are deliberately separated: `web/` never references
 `android/`, and the only thing crossing the boundary is `web/dist`, copied in
 by `npx cap sync android` (config at the repo root, `capacitor.config.json`).
 
 ## Run it
+
+### With Docker (nothing to install but Docker)
+
+```bash
+docker compose up web     # production build  -> http://localhost:8080
+docker compose up dev     # vite + hot reload -> http://localhost:5180
+```
+
+`web` is the honest deployment shape: a static build served by nginx, no
+backend, nothing to configure. Layout artifacts aren't committed, so the image
+regenerates them from the committed canonical graphs — a fresh clone works
+with no setup step. `dev` mounts the source for hot reload.
+
+### On the host
 
 ```bash
 npm install
@@ -166,6 +185,14 @@ built and verified, with a responsive phone UI checked by Playwright at
 
 Not built yet: multi-corpus UI, the agent layer, Neo4j push, and the Kagami
 adapter.
+
+**Unverified — the web Docker images.** `docker/Dockerfile`,
+`docker/nginx.conf` and `docker-compose.yml` are written and reviewed, but the
+image build has not completed successfully yet on this machine: Docker
+Desktop's engine keeps wedging (CLI calls hang indefinitely even though the
+daemon reports healthy). Retry with `docker compose up web`; if `docker`
+hangs, restart Docker Desktop first (see CLAUDE.md for the exact fix — don't
+use `wsl --shutdown`).
 
 **In flight — signed Android release.** The keystore exists
 (`android/keystore/` + `android/keystore.properties`, both gitignored —

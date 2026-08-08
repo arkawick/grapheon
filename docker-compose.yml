@@ -1,0 +1,40 @@
+# Grapheon — the web app, containerised.
+#
+#   docker compose up web     production build on http://localhost:8080
+#   docker compose up dev     vite + hot reload on http://localhost:5180
+#
+# `web` is the honest deployment shape: static files, no backend, nothing to
+# configure. `dev` exists for editing source without a host toolchain.
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: prod
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
+    ports:
+      - "5180:5180"
+    volumes:
+      # Source is mounted for hot reload. node_modules and dist are anonymous
+      # volumes so the host's (or absent) copies never shadow the container's
+      # — a Windows host's node_modules would be the wrong platform anyway.
+      - ./extract:/app/extract
+      - ./pipeline:/app/pipeline
+      - ./web:/app/web
+      - ./data:/app/data
+      - /app/node_modules
+      - /app/web/node_modules
+      - /app/web/dist
+    command: >
+      sh -c "node pipeline/build.js --name aeon &&
+             node pipeline/build.js --name grapheon &&
+             npm run dev --workspace web -- --host 0.0.0.0"

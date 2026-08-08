@@ -19,6 +19,9 @@ no backend, no database, no API key. Do not trade that away casually.
 - **web/** — Vite + React 18 + PixiJS 8 + pixi-viewport. Static; no server calls.
 - **android/** — Capacitor 8 shell around `web/dist`; deliberately at the ROOT,
   fully separated from web/. Release builds happen in Docker (`android/docker/`).
+- **docker/** — Dockerfile (multi-stage: deps → source → dev | build → prod)
+  and nginx.conf for the WEB app. Entirely separate from `android/docker/`,
+  which is a toolchain image for the APK; they share nothing.
 - **bench/** — the measured evidence (RESULTS.md) behind the JS port.
 - npm workspaces (extract, pipeline, web). Node 22. Capacitor config at repo
   root (`capacitor.config.json`, webDir `web/dist`); @capacitor/* are root
@@ -27,6 +30,11 @@ no backend, no database, no API key. Do not trade that away casually.
 ## Running it
 
 ```bash
+# Docker (no host toolchain needed)
+docker compose up web                      # nginx + static build -> :8080
+docker compose up dev                      # vite hot reload      -> :5180
+
+# Host
 npm install
 node extract/node.mjs <repo> --out data/<name>/graph.json   # JS extractor
 npm run build:graph -- --name <name>       # adapt + Louvain + FA2
@@ -218,6 +226,20 @@ out unsigned instead of failing). Host debug path still works:
   days ago, WSL distro "Running", yet every `docker` CLI call hangs forever.
   Fix: kill Docker Desktop + com.docker.backend, `wsl -t docker-desktop`,
   relaunch. Do NOT `wsl --shutdown` (kills the user's Ubuntu distro too).
+
+**Web app in Docker** (`docker/`, `docker-compose.yml`):
+- **nginx must be told `application/wasm` explicitly.** Its stock mime.types
+  is inconsistent across versions, and a grammar served as octet-stream makes
+  `instantiateStreaming` refuse it — in-browser extraction dies at "loading
+  parsers" while the map itself still works, which reads as an app bug rather
+  than a server one.
+- **Vite in a container needs `--host 0.0.0.0`** or it binds loopback inside
+  the container and the published port answers nothing.
+- The image **regenerates layout artifacts** from the committed canonical
+  graphs (`data/*/graph.canonical.json`) rather than copying the host's —
+  `web/public/data` is in `.dockerignore` for that reason. Fresh clone → works.
+- `.dockerignore` excludes `android/` (separate build, megabytes of synced
+  minified bundles) and anything matching `keystore*`.
 
 ## IN FLIGHT: signed Android release (resume here)
 
