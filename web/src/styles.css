@@ -354,3 +354,87 @@ canvas {
   .statusbar { display: none; }
   .status.busy { inset: auto 10px calc(10px + env(safe-area-inset-bottom)) auto; }
 }
+
+/* ==========================================================================
+   Code pane — a split MODE, not a route.
+   The pane is a sibling of .stage, so the map keeps its own (narrower) box
+   and the WebGL context is never torn down. pixi-viewport's resizeTo watches
+   the container, so the map re-fits itself when the split changes.
+   ========================================================================== */
+.code-pane {
+  display: flex; flex-direction: column;
+  width: 46%; min-width: 320px; flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: #0d0d14;
+  overflow: hidden;
+}
+
+.code-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.code-title {
+  display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;
+}
+.code-title strong { font-size: 13px; }
+.code-title .mono {
+  font-size: 11px; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; direction: rtl; text-align: left;
+}
+.code-head .close {
+  background: none; border: 0; color: var(--dim);
+  font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px;
+}
+.code-head .close:hover { color: var(--text); }
+
+.code-scroll { flex: 1; overflow: auto; }
+.code {
+  margin: 0; padding: 8px 0;
+  font: 12px/1.55 ui-monospace, "Cascadia Code", Consolas, monospace;
+  tab-size: 4;
+}
+.code-line { display: flex; padding: 0 8px 0 0; white-space: pre; }
+.code-line .ln {
+  flex-shrink: 0; width: 46px; padding-right: 12px;
+  text-align: right; color: #4a4a5e; user-select: none;
+}
+.code-line code { white-space: pre; }
+
+/* The entity the graph pointed at. */
+.code-line.target { background: rgba(125, 211, 252, 0.13); }
+.code-line.target .ln { color: var(--accent); }
+
+/* A line where a neighbour of the selection is defined — the gutter mark is
+   the graph leaking usefully into the text. */
+.code-line.marked .ln {
+  color: #fde047;
+  box-shadow: inset 2px 0 0 #fde047;
+}
+
+.view-code {
+  width: 100%; margin: 4px 0 2px; padding: 6px 10px;
+  background: rgba(125, 211, 252, 0.12); color: var(--accent);
+  border: 1px solid rgba(125, 211, 252, 0.35); border-radius: 7px;
+  font: inherit; cursor: pointer;
+}
+.view-code:hover { background: rgba(125, 211, 252, 0.2); }
+
+/* When the code pane is open the map has less room; keep the right-hand
+   panels from covering what's left of it. */
+.app.code-open .panel,
+.app.code-open .detail { width: 300px; }
+
+@media (max-width: 720px) {
+  /* No room to split a phone: the code takes the screen, with the map behind
+     it. Closing returns you to exactly where you were on the map. */
+  .code-pane {
+    position: absolute; inset: 0; z-index: 5;
+    width: auto; min-width: 0;
+    border-left: 0;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .app.code-open .panel,
+  .app.code-open .detail { width: auto; }
+}

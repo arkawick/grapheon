@@ -156,6 +156,19 @@ export class AtlasRenderer {
     this.viewport.on('zoomed-end', this._applyLOD);
     this._applyLOD();
 
+    // Pixi's `resizeTo` only listens for WINDOW resizes. Opening the code pane
+    // shrinks this container without the window changing at all, so the canvas
+    // would keep its old width and the map would be silently cropped —
+    // measured: container ~750px, canvas still 1392px. Watch the element.
+    this._resizeObserver = new ResizeObserver(() => {
+      const { clientWidth: w, clientHeight: h } = this.container;
+      if (!w || !h || !this.app) return;
+      this.app.renderer.resize(w, h);
+      this.viewport.resize(w, h); // viewport tracks the screen box separately
+      this._applyLOD();
+    });
+    this._resizeObserver.observe(this.container);
+
     this._wireInteraction();
     return this;
   }
@@ -344,6 +357,8 @@ export class AtlasRenderer {
   }
 
   destroy() {
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = null;
     this.app?.destroy(true, { children: true, texture: true });
     this.app = null;
     this.canvas?.remove();

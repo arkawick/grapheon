@@ -10,11 +10,15 @@
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import { join, extname, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { Parser, Language } from 'web-tree-sitter';
 import { extractCorpus } from './src/extract.js';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const WASM = join(HERE, 'node_modules', '@vscode', 'tree-sitter-wasm', 'wasm');
+// Resolve the grammar directory rather than assuming extract/node_modules:
+// npm workspaces HOIST a dependency to the root when another workspace
+// declares it too, so the hardcoded path breaks the moment web/ shares it.
+const require = createRequire(import.meta.url);
+const WASM = dirname(require.resolve('@vscode/tree-sitter-wasm/wasm/tree-sitter-python.wasm'));
 // `android` matters here too: cap sync copies the built dist (minified
 // one-line bundles) into android/app/src/main/assets, and parsing those
 // stalls the extractor — the same trap that bit the Playwright drive.
@@ -63,3 +67,21 @@ mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, JSON.stringify(graph));
 console.log(`${files.length} files -> ${graph.nodes.length} nodes, ${graph.links.length} links in ${ms.toFixed(0)} ms`);
 console.log(`wrote ${out}`);
+
+// Source text for the code viewer, written beside the graph.
+//
+// Only files the graph actually references — a repo's parseable files and its
+// *mapped* files are not the same set, and shipping the difference is dead
+// weight. This is the one moment the text is in hand: the CLI has already read
+// every file, and by the time pipeline/build.js runs it only has the graph.
+const referenced = new Set(
+  graph.nodes.map((n) => n.source_file).filter(Boolean)
+);
+const sources = {};
+for (const f of files) {
+  if (referenced.has(f.path)) sources[f.path] = f.src;
+}
+const srcOut = join(dirname(out), 'sources.json');
+writeFileSync(srcOut, JSON.stringify(sources));
+const mb = (statSync(srcOut).size / 1e6).toFixed(2);
+console.log(`wrote ${srcOut} (${Object.keys(sources).length} files, ${mb} MB)`);

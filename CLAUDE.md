@@ -31,13 +31,14 @@ no backend, no database, no API key. Do not trade that away casually.
 
 ```bash
 # Docker (no host toolchain needed)
-docker compose up web                      # nginx + static build -> :8080
+docker compose up web                      # nginx + static build -> :8090
 docker compose up dev                      # vite hot reload      -> :5180
 
 # Host
 npm install
-node extract/node.mjs <repo> --out data/<name>/graph.json   # JS extractor
-npm run build:graph -- --name <name>       # adapt + Louvain + FA2
+node extract/node.mjs <repo> --out data/<name>/graph.json   # JS extractor (+sources)
+node pipeline/collect-sources.js --name <n> --repo <path>   # sources for a graphify corpus
+npm run build:graph -- --name <name>       # adapt + Louvain + FA2 + sources
 npm run dev                                # http://localhost:5180
 
 npm test                                   # blast.js + corpus.js unit tests
@@ -273,6 +274,32 @@ Where this stands as of 2026-08-02:
   (3) verify the signature (`apksigner verify --print-certs` from
   build-tools, or `jarsigner -verify`),
   (4) the debug-APK-on-real-phone perf test is still owed.
+
+## Code viewer
+
+`web/src/CodePane.jsx` + `lib/sources.js`. A split MODE (sibling of `.stage`),
+not a route — the map must stay visible beside it and it works on every page.
+highlight.js, python + javascript only.
+- **Highlight the whole file, THEN split into lines.** Per-line highlighting
+  restarts the lexer mid-docstring and mis-colours everything below. Splitting
+  after means hljs's spans get cut at line boundaries, so `CodePane` re-opens
+  them per line — that's what `trackOpenSpans` is for, not premature cleverness.
+- **Pixi's `resizeTo` only watches the WINDOW.** Opening the pane shrinks the
+  map's container without a window resize, so the canvas kept its old width
+  and the map was silently cropped (measured: container 750px, canvas 1392px).
+  `AtlasRenderer` now holds a `ResizeObserver` on its container.
+- Sources are served **per file** from a mirrored tree, never as one blob —
+  see `docs/CONTRACT.md` §4 for why (Aeon's corpus is 18 MB of text).
+
+## Ground truth (bench/ground-truth/)
+
+`bench/ground-truth/aeon.graphify.canonical.json` is the COMMITTED graphify
+output that `extract/score.mjs` scores against. It lives there, not in
+`data/aeon/`, because **data/ is a working directory**: re-extracting a corpus
+overwrites it, and this file was once clobbered exactly that way — after which
+score.mjs cheerfully reported **100% recall while comparing our output to
+itself**. A benchmark you can silently overwrite is not a benchmark. If a
+recall number ever looks suspiciously perfect, check what TRUTH points at.
 
 ## Known gaps
 

@@ -157,6 +157,33 @@ Debug builds on the host still work if you have a JDK + SDK:
 The app is the static site verbatim — extraction runs in the WebView's
 worker, on-device, offline.
 
+## Code viewer
+
+Select any entity and hit **View code** — the map shrinks left, the source
+opens right, scrolled to that entity's lines with its range highlighted.
+Syntax highlighting via highlight.js.
+
+It's a split *mode*, not a page, deliberately: the map has to stay visible
+beside the code (that's the point), it works from Blast Radius as well as the
+Atlas, and code is always *about a selection* rather than a destination.
+
+The gutter is graph-aware — lines where a neighbour of the selection is
+defined get a marker, so the relations in the panel and the lines in the file
+are the same information seen two ways.
+
+Source text is captured at extraction time and served **per file** from a
+mirrored tree (`/data/<name>/src/…`). Not one blob: the full Aeon corpus is
+18 MB of text, and opening one function shouldn't download that. For a corpus
+extracted in the browser it's free — the worker still holds every file.
+
+A corpus without captured sources simply has no code viewer. To add it to one
+built by the graphify CLI:
+
+```bash
+node pipeline/collect-sources.js --name aeon --repo ../Project-Aeon
+npm run build:graph -- --name aeon
+```
+
 ## Pages
 
 **Atlas** — the map. Search over labels and paths, filter by kind, jump to a

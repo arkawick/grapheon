@@ -2,27 +2,44 @@
 /**
  * Score the JS extractor's links against graphify's, per relation.
  *
- *   node extract/score.mjs graph.extracted.json
+ *   node extract/node.mjs <repo> --out /tmp/ours.json
+ *   node extract/score.mjs /tmp/ours.json [relation]
  *
- * Compares (source, target, relation) triples over the file types both sides
- * parse (.py/.js/.jsx). Recall = of graphify's links, how many we produced.
- * Precision = of ours, how many graphify agrees with. Precision here is soft —
- * a link graphify lacks is not automatically wrong — but a low number flags
- * over-generation.
+ * Ground truth is bench/ground-truth/aeon.graphify.canonical.json — a
+ * COMMITTED copy of the canonical graph derived from graphify's own output on
+ * Project-Aeon.
+ *
+ * It lives there, and not in data/aeon/, because data/ is a working directory:
+ * re-extracting a corpus overwrites it, and this file once got clobbered by
+ * exactly that — after which the script cheerfully reported 100% recall while
+ * comparing our output against itself. A benchmark you can silently overwrite
+ * is not a benchmark.
+ *
+ * Recall    = of graphify's links, how many we produced.
+ * Precision = of ours, how many graphify agrees with. Soft — a link graphify
+ *             lacks is not automatically wrong — but a low number flags
+ *             over-generation.
  */
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-const TRUTH = 'C:/Users/Arkajyoti/Downloads/App/data/aeon/graph.json';
+const HERE = dirname(fileURLToPath(import.meta.url));
+const TRUTH = join(HERE, '..', 'bench', 'ground-truth', 'aeon.graphify.canonical.json');
 const OURS = process.argv[2] ?? 'graph.extracted.json';
 const CODE_EXT = /\.(py|jsx?)$/;
 
-const truth = JSON.parse(readFileSync(TRUTH, 'utf8'));
+// The canonical form carries edges as [source, target, weight, relation,
+// confidence] and node paths under attrs.path.
+const truthDoc = JSON.parse(readFileSync(TRUTH, 'utf8'));
+const truthPath = new Map(truthDoc.nodes.map((n) => [n.id, n.attrs?.path ?? null]));
+const truthLinks = truthDoc.edges
+  .map(([source, target, , relation]) => ({ source, target, relation, source_file: truthPath.get(source) }))
+  .filter((l) => CODE_EXT.test(l.source_file ?? ''));
+
 const ours = JSON.parse(readFileSync(OURS, 'utf8'));
 
 const key = (l) => `${l.source}\x00${l.target}\x00${l.relation}`;
-
-const inScope = (l) => CODE_EXT.test(l.source_file ?? '');
-const truthLinks = truth.links.filter(inScope);
 
 // Precision is only meaningful over files graphify actually processed — our
 // walk covers ~12x more files (vendored/setup trees its boundary skips), and
@@ -61,7 +78,7 @@ if (relArg) {
   let n = 0;
   for (const l of truthLinks) {
     if (l.relation !== relArg || ourSet.has(key(l))) continue;
-    console.log(`  ${l.source} -> ${l.target}  (${l.source_file} ${l.source_location})`);
+    console.log(`  ${l.source} -> ${l.target}  (${l.source_file})`);
     if (++n >= 25) break;
   }
 }

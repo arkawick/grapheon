@@ -5,6 +5,8 @@ import { GraphContext } from './GraphContext.js';
 import Sidebar from './components/Sidebar.jsx';
 import AtlasPage from './pages/AtlasPage.jsx';
 import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
+import CodePane from './CodePane.jsx';
+import { fetchedSources, inMemorySources } from './lib/sources.js';
 
 const DEFAULT_CORPUS = 'aeon';
 
@@ -54,6 +56,8 @@ export default function App() {
   const [busy, setBusy] = useState(null);     // { stage, detail } while extracting
   const [error, setError] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [sources, setSources] = useState(null);   // source-text origin, or null
+  const [codeOpen, setCodeOpen] = useState(false);
 
   // --- default corpus ------------------------------------------------------
   useEffect(() => {
@@ -69,6 +73,11 @@ export default function App() {
           if (er.ok) edges = readEdges(await er.json(), layout);
         }
         if (!cancelled) setCorpus({ name: DEFAULT_CORPUS, layout, edges });
+
+        // Source manifest is optional — a corpus built without it simply has
+        // no code viewer, so a 404 here is not an error.
+        const sr = await fetch(`/data/${DEFAULT_CORPUS}.sources.json`);
+        if (!cancelled && sr.ok) setSources(fetchedSources(await sr.json()));
       } catch (err) {
         if (!cancelled) setError(err.message);
       }
@@ -138,6 +147,9 @@ export default function App() {
       else if (msg.type === 'result') {
         setBusy(null);
         setCorpus({ name, layout: msg.layout, edges: msg.edges });
+        // The files are already in memory here — the worker just parsed them —
+        // so the code viewer costs nothing for a browser-extracted corpus.
+        setSources(inMemorySources(files));
         w.terminate();
         workerRef.current = null;
       } else if (msg.type === 'error') {
@@ -178,20 +190,34 @@ export default function App() {
     rendererRef.current?.setKindFilter(kinds);
   }, []);
 
+  // Entities from the same file as the selection, so the code gutter can mark
+  // where its neighbours are defined.
+  const relatedInFile = useMemo(() => {
+    if (!selected?.a?.path || !adjacency) return [];
+    const out = [];
+    for (const link of adjacency.get(selected.id) ?? []) {
+      const n = nodeById.get(link.id);
+      if (n?.a?.path) out.push({ path: n.a.path, loc: n.a.loc, label: n.l, rel: link.rel });
+    }
+    return out;
+  }, [selected, adjacency, nodeById]);
+
   const value = useMemo(() => ({
     layout: corpus?.layout ?? null,
     corpusName: corpus?.name ?? null,
     adjacency, ensureAdjacency, nodeById,
     selected, setSelected, focus, highlight, setKindFilter,
     extractRepo, busy,
-  }), [corpus, adjacency, ensureAdjacency, nodeById, selected, focus, highlight, setKindFilter, extractRepo, busy]);
+    sources, codeOpen, setCodeOpen,
+  }), [corpus, adjacency, ensureAdjacency, nodeById, selected, focus, highlight,
+       setKindFilter, extractRepo, busy, sources, codeOpen]);
 
   const layout = corpus?.layout;
 
   return (
     <HashRouter>
       <GraphContext.Provider value={value}>
-        <div className="app">
+        <div className={`app${codeOpen && selected ? ' code-open' : ''}`}>
           <Sidebar />
 
           <main className="stage">
@@ -227,6 +253,18 @@ export default function App() {
               </Routes>
             )}
           </main>
+
+          {/* Sibling of the stage, not a route: the code pane is a layout mode
+              that works on every page, and the map must stay visible beside
+              it — that side-by-side is the entire point. */}
+          {codeOpen && selected && (
+            <CodePane
+              node={selected}
+              sources={sources}
+              related={relatedInFile}
+              onClose={() => setCodeOpen(false)}
+            />
+          )}
         </div>
       </GraphContext.Provider>
     </HashRouter>

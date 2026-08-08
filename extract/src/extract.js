@@ -60,7 +60,17 @@ export function extractCorpus(files, langs) {
   const deferLink = (source, target, relation, file, line, opts) =>
     deferred.push([source, target, relation, file, line, opts]);
 
-  const addNode = (n) => nodes.push({ _origin: 'ast', ...n });
+  // Ids are derived from names, and names repeat legitimately: a Python
+  // @property and its @x.setter are two definitions of one name, as are
+  // overloads and re-definitions under different branches. First declaration
+  // wins — emitting both would make ids non-unique and graphology refuses to
+  // build the graph at all ("node already exist").
+  const seenNodeId = new Set();
+  const addNode = (n) => {
+    if (seenNodeId.has(n.id)) return;
+    seenNodeId.add(n.id);
+    nodes.push({ _origin: 'ast', ...n });
+  };
   const addLink = (source, target, relation, file, line, opts = {}) => {
     if (!source || !target || source === target) return;
     const key = `${source}\x00${target}\x00${relation}`;
@@ -166,9 +176,8 @@ export function extractCorpus(files, langs) {
   }
 
   // Deferred edges: only those whose target turned out to be a real entity.
-  const nodeIds = new Set(nodes.map((n) => n.id));
   for (const [source, target, relation, file, line, opts] of deferred) {
-    if (nodeIds.has(target)) addLink(source, target, relation, file, line, opts);
+    if (seenNodeId.has(target)) addLink(source, target, relation, file, line, opts);
   }
 
   return { input_tokens: 0, output_tokens: 0, nodes, links, directed: false };

@@ -6,7 +6,10 @@
  * the extractor's hypothesis, and a reader deserves to know which claims are
  * read straight out of the source and which were resolved by analysis.
  */
-export default function DetailPanel({ node, neighbours, communities, onClose, onPick }) {
+export default function DetailPanel({
+  node, neighbours, communities, onClose, onPick,
+  canViewCode = false, codeOpen = false, onToggleCode,
+}) {
   const community = communities.find((c) => c.id === node.c);
 
   const grouped = neighbours.reduce((acc, n) => {
@@ -36,6 +39,12 @@ export default function DetailPanel({ node, neighbours, communities, onClose, on
         )}
         <dt>Connections</dt><dd>{neighbours.length}</dd>
       </dl>
+
+      {canViewCode && (
+        <button className="view-code" onClick={onToggleCode}>
+          {codeOpen ? 'Hide code' : 'View code'}
+        </button>
+      )}
 
       {relations.length === 0 && (
         <p className="dim empty">Nothing links to this node.</p>

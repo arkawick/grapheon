@@ -8,6 +8,7 @@ export default function AtlasPage() {
   const {
     layout, adjacency, ensureAdjacency, nodeById,
     selected, setSelected, focus, highlight, setKindFilter,
+    sources, codeOpen, setCodeOpen,
   } = useGraph();
 
   const [hidden, setHidden] = useState(() => new Set());
@@ -67,6 +68,9 @@ export default function AtlasPage() {
           node={selected}
           neighbours={neighbours}
           communities={layout.communities}
+          canViewCode={!!sources?.has(selected.a?.path)}
+          codeOpen={codeOpen}
+          onToggleCode={() => setCodeOpen((o) => !o)}
           onClose={() => setSelected(null)}
           onPick={(id) => {
             const n = nodeById.get(id);

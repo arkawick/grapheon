@@ -121,6 +121,36 @@ with no backend involved.
 `weight` is dropped here: it was a layout input, and the UI cares about the
 relation and its provenance instead.
 
+---
+
+## 4. Source text — `web/public/data/<name>.sources.json` + `<name>/src/…`
+
+Optional. Present only when the extractor captured source text
+(`extract/node.mjs` does inline; `pipeline/collect-sources.js` adds it to a
+corpus built by the graphify CLI). A corpus without it simply has no code
+viewer — nothing else degrades.
+
+The manifest is small and eagerly fetched:
+
+```json
+{
+  "meta":  { "buildId": "3f9a2c1b8de4" },
+  "base":  "/data/aeon/src",
+  "paths": ["aeon/backend/core/llm.py", "…"]
+}
+```
+
+The text itself is a **mirrored tree**, one file per source file, fetched
+individually on demand: `/data/aeon/src/aeon/backend/core/llm.py`.
+
+Deliberately not one blob. Aeon's full corpus is 18 MB of text; a reader
+opening one function should download the ~4 KB they are reading, not the
+repository. Only files the graph actually references are captured — a repo's
+parseable files and its *mapped* files are different sets.
+
+For a corpus extracted in the browser there is no fetch at all: the worker
+still holds every file in memory, so the viewer reads from there.
+
 **`buildId` must match the layout's**, and the app throws if it doesn't. A
 cached layout against a fresh edge file resolves fewer node ids and silently
 returns a *smaller* blast radius — a plausible-looking wrong number is worse

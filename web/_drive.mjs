@@ -84,6 +84,30 @@ const tally = (await page.textContent('.tally'))?.replace(/\s+/g, ' ').trim();
 const rings = await page.$$eval('.ring h3', (hs) => hs.map((h) => h.textContent.trim()));
 await page.screenshot({ path: 'blast.png' });
 
+// --- code viewer -------------------------------------------------------------
+// Search rather than clicking the map: a deterministic entity with real source.
+await page.click('.nav a[href="#/"]');
+await page.fill('.search input', 'llm.py');
+await page.waitForSelector('.results li', { timeout: 8000 });
+await page.click('.results li');
+await page.waitForSelector('.view-code', { timeout: 8000 });
+await page.click('.view-code');
+await page.waitForSelector('.code-pane .code-line', { timeout: 15000 });
+await page.waitForTimeout(700);
+const code = await page.evaluate(() => {
+  const canvas = document.querySelector('canvas');
+  return {
+    lines: document.querySelectorAll('.code-line').length,
+    hljs: document.querySelectorAll('.code code span[class^="hljs-"]').length,
+    marked: document.querySelectorAll('.code-line.marked').length,
+    // The map must SHRINK beside the code, not be covered by it — pixi only
+    // watches window resizes, so this asserts the ResizeObserver still works.
+    canvasWidth: Math.round(canvas?.getBoundingClientRect().width ?? 0),
+  };
+});
+await page.screenshot({ path: 'code-view.png' });
+await page.click('.code-head .close');
+
 // --- in-browser extraction: the whole pipeline in a worker -----------------
 // Drives the exact code path the folder picker uses, minus the picker.
 await page.click('.nav a[href="#/"]');
@@ -146,8 +170,9 @@ console.log(`connections: ${connections}`);
 console.log(`blast      : ${tally}`);
 console.log(`rings      : ${rings.join(' | ')}`);
 console.log(`self-map   : ${selfStats} (${repoFiles.length} files extracted in-browser)`);
+console.log(`code       : ${code.lines} lines, ${code.hljs} highlight spans, ${code.marked} gutter marks; map reflowed to ${code.canvasWidth}px`);
 console.log(`mobile     : folder-btn=${folderBtnCount} (want 0) zip-btn=${zipBtnCount} (want 1); blast sheet top=${sheet.top}px width=${sheet.width}px`);
-console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, mobile-{atlas,detail,blast}.png`);
+console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, mobile-{atlas,detail,blast}.png`);
 if (errors.length) {
   console.error(`\n${errors.length} console error(s):`);
   for (const e of errors.slice(0, 10)) console.error('  ' + e);

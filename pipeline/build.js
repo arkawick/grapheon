@@ -65,20 +65,33 @@ function main() {
   }
 
   const inPath = path.isAbsolute(input) ? input : path.join(ROOT, input);
-  if (!fs.existsSync(inPath)) {
-    throw new Error(`No extractor output at ${inPath}\nRun:  graphify update <repo> --no-cluster`);
-  }
-
-  console.log(`Reading ${source} output from ${inPath} ...`);
-  const raw = JSON.parse(fs.readFileSync(inPath, 'utf8'));
-
-  const canonical = adapter.adapt(raw, name);
-  const c = canonical.meta.counts;
-  console.log(`  ${c.nodes} nodes, ${c.edges} edges (${c.materialised_external} external endpoints materialised)`);
-
   const canonPath = path.join(ROOT, 'data', name, 'graph.canonical.json');
-  fs.mkdirSync(path.dirname(canonPath), { recursive: true });
-  fs.writeFileSync(canonPath, JSON.stringify(canonical));
+
+  let canonical;
+  if (fs.existsSync(inPath)) {
+    console.log(`Reading ${source} output from ${inPath} ...`);
+    const raw = JSON.parse(fs.readFileSync(inPath, 'utf8'));
+    canonical = adapter.adapt(raw, name);
+    const c = canonical.meta.counts;
+    console.log(`  ${c.nodes} nodes, ${c.edges} edges (${c.materialised_external} external endpoints materialised)`);
+    fs.mkdirSync(path.dirname(canonPath), { recursive: true });
+    fs.writeFileSync(canonPath, JSON.stringify(canonical));
+  } else if (fs.existsSync(canonPath)) {
+    // Raw extractor output is gitignored (large, regenerable); the canonical
+    // graph is committed. Falling back to it is what lets a fresh clone — and
+    // the Docker image, which only ever sees committed files — build without
+    // re-running an extractor.
+    console.log(`No raw output at ${inPath}; using committed ${path.relative(ROOT, canonPath)}`);
+    canonical = JSON.parse(fs.readFileSync(canonPath, 'utf8'));
+    console.log(`  ${canonical.nodes.length} nodes, ${canonical.edges.length} edges`);
+  } else {
+    throw new Error(
+      `Nothing to build for "${name}".\n` +
+      `  Expected raw output at ${inPath}\n` +
+      `  or a committed canonical graph at ${canonPath}\n` +
+      `Run:  node extract/node.mjs <repo> --out data/${name}/graph.json`
+    );
+  }
 
   const seed = Number(arg('--seed', 1));
   const layout = build(canonical, { iterations, seed, log: (m) => console.log(m) });
@@ -103,6 +116,39 @@ function main() {
   fs.writeFileSync(edgePath, JSON.stringify({ meta: { buildId: id }, edges }));
   const ekb = (fs.statSync(edgePath).size / 1e3).toFixed(0);
   console.log(`Wrote ${path.relative(ROOT, edgePath)} (${edges.length} edges, ${ekb} KB, lazy-loaded)`);
+
+  // Source text for the code viewer, if the extractor captured it
+  // (extract/node.mjs does; the graphify CLI does not). Optional by design —
+  // a corpus without it simply has no code viewer rather than failing.
+  //
+  // Written as a MIRRORED TREE, one file per source file, plus a small
+  // manifest of available paths. Not one blob: Aeon's corpus is 18 MB of
+  // text, and no lazy-load excuses a download that size when a reader opens
+  // one function. Per-file means you fetch the ~4 KB you're actually reading.
+  const srcIn = path.join(ROOT, 'data', name, 'sources.json');
+  if (fs.existsSync(srcIn)) {
+    const sources = JSON.parse(fs.readFileSync(srcIn, 'utf8'));
+    const srcDir = path.join(ROOT, 'web', 'public', 'data', name, 'src');
+    fs.rmSync(srcDir, { recursive: true, force: true }); // drop files a re-extract removed
+    let bytes = 0;
+    for (const [rel, text] of Object.entries(sources)) {
+      const dest = path.join(srcDir, rel);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, text);
+      bytes += Buffer.byteLength(text);
+    }
+    const manifest = path.join(ROOT, 'web', 'public', 'data', `${name}.sources.json`);
+    fs.writeFileSync(manifest, JSON.stringify({
+      meta: { buildId: id },
+      base: `/data/${name}/src`,
+      paths: Object.keys(sources),
+    }));
+    const mmb = (fs.statSync(manifest).size / 1e6).toFixed(2);
+    console.log(`Wrote ${path.relative(ROOT, srcDir)}/ (${Object.keys(sources).length} files, ${(bytes / 1e6).toFixed(1)} MB total, fetched one at a time)`);
+    console.log(`Wrote ${path.relative(ROOT, manifest)} (${mmb} MB manifest)`);
+  } else {
+    console.log('No sources.json for this corpus — code viewer will be unavailable.');
+  }
 
   const mb = (fs.statSync(outPath).size / 1e6).toFixed(2);
   console.log(`\nWrote ${path.relative(ROOT, outPath)} (${layout.nodes.length} nodes, ${mb} MB)`);
