@@ -218,6 +218,12 @@ out unsigned instead of failing). Host debug path still works:
   for tens of seconds (bit `_drive.mjs`, then would have bit `extract/node.mjs`).
   `corpus.js` also has a `looksMinified` guard (>400 chars/line average).
 - The synced assets are gitignored; the android/ project itself is committed.
+- **Capacitor plugins must be declared in the ROOT package.json**, not in
+  `web/`. The CLI reads the root manifest to register native plugins, and a
+  plugin installed in a workspace syncs with no warning and no
+  "Found N Capacitor plugins" line — the JS import resolves via hoisting, so
+  it looks fine on the web and silently does nothing on the device. Third
+  workspace-hoisting trap in this repo; check that line after any plugin add.
 - **A running Vite dev server holds watcher handles on the whole `web/` tree**
   — moving `web/android` out failed with "Device or resource busy" until every
   vite process (including one orphaned from a killed npm wrapper a day earlier)
@@ -290,6 +296,12 @@ highlight.js, python + javascript only.
   `AtlasRenderer` now holds a `ResizeObserver` on its container.
 - Sources are served **per file** from a mirrored tree, never as one blob —
   see `docs/CONTRACT.md` §4 for why (Aeon's corpus is 18 MB of text).
+- **Mobile**: full-screen overlay, wrap ON by default (without it llm.py needs
+  706px of horizontal scroll in a 390px viewport). The drive asserts
+  `overflowX === 0` on the phone pass.
+- **Android back button** (`lib/backButton.js`, `@capacitor/app`) dismisses the
+  code pane, then the selection, before exiting. Registered as a stack so
+  future overlays can join it. Dynamic-imported, so the web build is unaffected.
 
 ## Ground truth (bench/ground-truth/)
 

@@ -176,6 +176,12 @@ mirrored tree (`/data/<name>/src/…`). Not one blob: the full Aeon corpus is
 18 MB of text, and opening one function shouldn't download that. For a corpus
 extracted in the browser it's free — the worker still holds every file.
 
+On a phone the pane goes full-screen over the map, and **word wrap is on by
+default** — a 390px screen shows ~45 columns, and without it `llm.py` needs
+706px of horizontal scrolling to read one line. Toggle it off from the header.
+Android's **back button closes the code pane** (then clears the selection)
+before it will leave the app.
+
 A corpus without captured sources simply has no code viewer. To add it to one
 built by the graphify CLI:
 

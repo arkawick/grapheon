@@ -438,3 +438,21 @@ canvas {
   .app.code-open .panel,
   .app.code-open .detail { width: auto; }
 }
+
+/* Word wrap: essential on a phone (a 390px screen shows ~45 columns, and code
+   routinely needs 3x that), optional on a desktop where horizontal room is
+   cheap and alignment carries meaning. */
+.code.wrap .code-line { white-space: pre-wrap; }
+.code.wrap .code-line code { white-space: pre-wrap; word-break: break-word; }
+.code.wrap .code-line .ln { align-self: flex-start; }
+
+.wrap-toggle {
+  flex-shrink: 0; padding: 3px 8px; border-radius: 999px;
+  background: none; border: 1px solid var(--border); color: var(--dim);
+  font: inherit; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.06em; cursor: pointer;
+}
+.wrap-toggle.on {
+  background: rgba(125, 211, 252, 0.14);
+  border-color: rgba(125, 211, 252, 0.35); color: var(--accent);
+}

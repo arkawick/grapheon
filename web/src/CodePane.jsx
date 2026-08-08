@@ -56,6 +56,9 @@ function escapeHtml(s) {
 export default function CodePane({ node, sources, onClose, related = [] }) {
   const [text, setText] = useState(null);
   const [error, setError] = useState(null);
+  // Wrapping defaults ON for narrow screens: a phone shows ~45 columns, and
+  // this file needs 706px of horizontal scroll to read one line otherwise.
+  const [wrap, setWrap] = useState(() => window.innerWidth <= 720);
   const scrollRef = useRef(null);
   const path = node?.a?.path ?? null;
   const line = lineOf(node?.a?.loc);
@@ -112,6 +115,13 @@ export default function CodePane({ node, sources, onClose, related = [] }) {
           <strong>{node.l}</strong>
           {path && <span className="mono dim">{path}{line ? `:${line}` : ''}</span>}
         </div>
+        <button
+          className={`wrap-toggle${wrap ? ' on' : ''}`}
+          onClick={() => setWrap((w) => !w)}
+          title={wrap ? 'Disable word wrap' : 'Enable word wrap'}
+        >
+          wrap
+        </button>
         <button className="close" onClick={onClose} aria-label="Close code">×</button>
       </header>
 
@@ -121,7 +131,7 @@ export default function CodePane({ node, sources, onClose, related = [] }) {
 
       {lines && (
         <div className="code-scroll" ref={scrollRef}>
-          <pre className="code">
+          <pre className={`code${wrap ? ' wrap' : ''}`}>
             {lines.map((html, i) => {
               const n = i + 1;
               const mark = marks.get(n);

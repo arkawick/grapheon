@@ -7,6 +7,7 @@ import AtlasPage from './pages/AtlasPage.jsx';
 import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
 import CodePane from './CodePane.jsx';
 import { fetchedSources, inMemorySources } from './lib/sources.js';
+import { onBackButton } from './lib/backButton.js';
 
 const DEFAULT_CORPUS = 'aeon';
 
@@ -163,6 +164,14 @@ export default function App() {
   }, []);
 
   useEffect(() => () => workerRef.current?.terminate(), []);
+
+  // Android back dismisses the top layer — code pane, then selection — before
+  // it is allowed to leave the app.
+  useEffect(() => onBackButton(() => {
+    if (codeOpen) { setCodeOpen(false); return true; }
+    if (selected) { setSelected(null); return true; }
+    return false;
+  }), [codeOpen, selected]);
 
   // Deterministic entry point for automation (and a handy console API):
   // window.__loadRepoFiles([{path, src}], 'name') drives the exact same path

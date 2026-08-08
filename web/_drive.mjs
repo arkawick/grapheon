@@ -151,6 +151,24 @@ await mpage.waitForSelector('.detail', { timeout: 10000 });
 await mpage.waitForTimeout(700);
 await mpage.screenshot({ path: 'mobile-detail.png' });
 
+// Code viewer on a phone: full-screen overlay, and wrap ON by default so
+// there is no horizontal scrolling (measured 706px of overflow without it).
+await mpage.tap('.view-code');
+await mpage.waitForSelector('.code-pane .code-line', { timeout: 15000 });
+await mpage.waitForTimeout(700);
+const mcode = await mpage.evaluate(() => {
+  const pane = document.querySelector('.code-pane').getBoundingClientRect();
+  const scroll = document.querySelector('.code-scroll');
+  return {
+    fullWidth: Math.round(pane.width),
+    overflowX: scroll.scrollWidth - scroll.clientWidth,
+    lines: document.querySelectorAll('.code-line').length,
+  };
+});
+await mpage.screenshot({ path: 'mobile-code.png' });
+await mpage.tap('.code-head .close');
+await mpage.waitForTimeout(300);
+
 // Blast page renders as a bottom sheet.
 await mpage.tap('.nav a[href="#/blast"]');
 await mpage.waitForSelector('.blast', { timeout: 10000 });
@@ -172,7 +190,8 @@ console.log(`rings      : ${rings.join(' | ')}`);
 console.log(`self-map   : ${selfStats} (${repoFiles.length} files extracted in-browser)`);
 console.log(`code       : ${code.lines} lines, ${code.hljs} highlight spans, ${code.marked} gutter marks; map reflowed to ${code.canvasWidth}px`);
 console.log(`mobile     : folder-btn=${folderBtnCount} (want 0) zip-btn=${zipBtnCount} (want 1); blast sheet top=${sheet.top}px width=${sheet.width}px`);
-console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, mobile-{atlas,detail,blast}.png`);
+console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);
+console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, mobile-{atlas,detail,blast,code}.png`);
 if (errors.length) {
   console.error(`\n${errors.length} console error(s):`);
   for (const e of errors.slice(0, 10)) console.error('  ' + e);
