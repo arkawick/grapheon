@@ -227,14 +227,23 @@ out unsigned instead of failing). Host debug path still works:
   Fix: kill Docker Desktop + com.docker.backend, `wsl -t docker-desktop`,
   relaunch. Do NOT `wsl --shutdown` (kills the user's Ubuntu distro too).
 
-**Web app in Docker** (`docker/`, `docker-compose.yml`):
-- **nginx must be told `application/wasm` explicitly.** Its stock mime.types
-  is inconsistent across versions, and a grammar served as octet-stream makes
-  `instantiateStreaming` refuse it — in-browser extraction dies at "loading
-  parsers" while the map itself still works, which reads as an app bug rather
-  than a server one.
+**Web app in Docker** (`docker/`, `docker-compose.yml`) — **verified**:
+`docker compose up web` → :8090, and the full Playwright drive passes against
+the container (in-browser WASM extraction and mobile pass included).
+- **NEVER add a `types { ... }` block to nginx.conf's server context.** It
+  REPLACES the whole inherited map, so declaring `application/wasm wasm` alone
+  downgrades every other file — JS bundles included — to octet-stream, and a
+  module script with that type is refused. I shipped exactly this bug; the
+  tell was `content_type: application/octet-stream` on a `.js` asset.
+  `nginx:1.27-alpine`'s stock mime.types **already** has both wasm and js.
+- **Port 8080 is a trap on this machine.** `wslrelay` owns loopback:8080 for a
+  distro-side service and WSL's localhost forwarding beats Docker's binding:
+  requests reach the wrong server, you get a bare 404, and nginx's access log
+  stays EMPTY (that silence is the diagnostic). Compose publishes 8090.
 - **Vite in a container needs `--host 0.0.0.0`** or it binds loopback inside
   the container and the published port answers nothing.
+- **git-bash mangles container paths**: `docker exec ... ls /etc/nginx` becomes
+  `C:/Program Files/Git/etc/nginx`. Prefix with `MSYS_NO_PATHCONV=1`.
 - The image **regenerates layout artifacts** from the committed canonical
   graphs (`data/*/graph.canonical.json`) rather than copying the host's —
   `web/public/data` is in `.dockerignore` for that reason. Fresh clone → works.

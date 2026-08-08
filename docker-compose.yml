@@ -1,6 +1,6 @@
 # Grapheon — the web app, containerised.
 #
-#   docker compose up web     production build on http://localhost:8080
+#   docker compose up web     production build on http://localhost:8090
 #   docker compose up dev     vite + hot reload on http://localhost:5180
 #
 # `web` is the honest deployment shape: static files, no backend, nothing to
@@ -13,7 +13,11 @@ services:
       dockerfile: docker/Dockerfile
       target: prod
     ports:
-      - "8080:80"
+      # NOT 8080: on a machine running WSL, `wslrelay` can already own
+      # loopback:8080 for a distro-side service, and WSL's localhost
+      # forwarding wins over Docker's binding — requests reach the wrong
+      # server and the symptom is a plain 404 with nothing in nginx's log.
+      - "8090:80"
     restart: unless-stopped
 
   dev:

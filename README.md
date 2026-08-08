@@ -36,7 +36,7 @@ by `npx cap sync android` (config at the repo root, `capacitor.config.json`).
 ### With Docker (nothing to install but Docker)
 
 ```bash
-docker compose up web     # production build  -> http://localhost:8080
+docker compose up web     # production build  -> http://localhost:8090
 docker compose up dev     # vite + hot reload -> http://localhost:5180
 ```
 
@@ -44,6 +44,15 @@ docker compose up dev     # vite + hot reload -> http://localhost:5180
 backend, nothing to configure. Layout artifacts aren't committed, so the image
 regenerates them from the committed canonical graphs — a fresh clone works
 with no setup step. `dev` mounts the source for hot reload.
+
+Verified end to end against the container: the full Playwright drive passes
+through nginx, including in-browser WASM extraction (20 files → 101 nodes) and
+the mobile pass.
+
+Port 8090 rather than 8080 on purpose — on a WSL machine `wslrelay` can
+already own loopback:8080 for a distro-side service, and WSL's forwarding
+beats Docker's binding. The symptom is a bare 404 with *nothing* in nginx's
+log, which is a confusing hour if you don't know to look.
 
 ### On the host
 
@@ -185,14 +194,6 @@ built and verified, with a responsive phone UI checked by Playwright at
 
 Not built yet: multi-corpus UI, the agent layer, Neo4j push, and the Kagami
 adapter.
-
-**Unverified — the web Docker images.** `docker/Dockerfile`,
-`docker/nginx.conf` and `docker-compose.yml` are written and reviewed, but the
-image build has not completed successfully yet on this machine: Docker
-Desktop's engine keeps wedging (CLI calls hang indefinitely even though the
-daemon reports healthy). Retry with `docker compose up web`; if `docker`
-hangs, restart Docker Desktop first (see CLAUDE.md for the exact fix — don't
-use `wsl --shutdown`).
 
 **In flight — signed Android release.** The keystore exists
 (`android/keystore/` + `android/keystore.properties`, both gitignored —
