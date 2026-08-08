@@ -41,26 +41,109 @@ if (!fs.existsSync(canonPath)) {
 }
 
 const canonical = JSON.parse(fs.readFileSync(canonPath, 'utf8'));
-const paths = [...new Set(
+const mapped = [...new Set(
   canonical.nodes.map((n) => n.attrs?.path).filter(Boolean)
 )];
 
-const sources = {};
-let bytes = 0, missing = 0;
-for (const rel of paths) {
-  const abs = path.join(repo, rel);
-  try {
-    const text = fs.readFileSync(abs, 'utf8');
-    sources[rel] = text;
-    bytes += Buffer.byteLength(text);
-  } catch {
-    missing++; // file moved or deleted since extraction; the viewer just won't offer it
+// Beyond the files the GRAPH references, capture the ones a reader needs to
+// understand the repo at all: README, package.json, the compose file, CI YAML.
+// The extractor never parses these, so they have no nodes — and before the
+// file explorer existed they were simply invisible.
+//
+// Matched by NAME, not extension. An extension whitelist looked reasonable and
+// pulled in 17.6 MB of data dumps and fixtures from Aeon's setup trees — an
+// APK-doubling amount of text nobody would ever open. "Which files explain
+// this project" is a question about filenames, not suffixes.
+const DOC_PATTERNS = [
+  /^readme/i, /^changelog/i, /^contributing/i, /^license/i, /^architecture/i,
+  /^claude\.md$/i, /^agents\.md$/i, /\.md$/i, /\.rst$/i,
+];
+const MANIFEST_NAMES = new Set([
+  'package.json', 'pyproject.toml', 'setup.cfg', 'requirements.txt',
+  'go.mod', 'Cargo.toml', 'pom.xml', 'build.gradle', 'Gemfile',
+  'tsconfig.json', 'vite.config.js', 'Makefile', 'Procfile',
+  '.env.example', 'env.example',
+]);
+const CONTAINER_CI = [
+  /^dockerfile/i, /^docker-compose.*\.ya?ml$/i, /^jenkinsfile$/i,
+  /^\.gitlab-ci\.ya?ml$/i, /^capacitor\.config\.json$/i,
+];
+const SKIP_DIRS = new Set([
+  '.git', 'node_modules', 'graphify-out', '__pycache__', 'dist', '.venv',
+  'venv', 'build', 'target', '.gradle', '.next', 'coverage', 'out',
+  // Tooling scratch space. `.claude/worktrees` in particular holds whole
+  // COPIES of the repo, so without this the tree shows four identical
+  // README.md rows and the top hit is a one-line stub from a worktree.
+  '.claude', '.idea', '.vscode', '.pytest_cache', '.mypy_cache',
+  'site-packages', '.tox', '.cache',
+]);
+const MAX_BYTES = 512 * 1024;          // a doc larger than this is a data file
+const EXTRA_BUDGET = 2 * 1024 * 1024;  // total for non-graph files
+
+const isWorkflow = (rel) => /(^|\/)\.github\/workflows\/.+\.ya?ml$/i.test(rel);
+const isInteresting = (rel) => {
+  const b = path.basename(rel);
+  return DOC_PATTERNS.some((r) => r.test(b))
+    || MANIFEST_NAMES.has(b)
+    || CONTAINER_CI.some((r) => r.test(b))
+    || isWorkflow(rel);
+};
+
+function* walk(dir) {
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    if (SKIP_DIRS.has(e.name)) continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) yield* walk(p);
+    else yield p;
   }
 }
+
+const mappedSet = new Set(mapped);
+const extra = [];
+for (const abs of walk(repo)) {
+  const rel = path.relative(repo, abs).replaceAll('\\', '/');
+  if (mappedSet.has(rel) || !isInteresting(rel)) continue;
+  extra.push(rel);
+}
+// Shallowest first: a repo's top-level README explains more than the twelfth
+// one buried in a vendored subtree, and the budget should spend there.
+extra.sort((a, b) => a.split('/').length - b.split('/').length || a.localeCompare(b));
+
+const sources = {};
+let bytes = 0, extraBytes = 0, missing = 0, skipped = 0;
+
+const take = (rel, budgeted) => {
+  const abs = path.join(repo, rel);
+  try {
+    const st = fs.statSync(abs);
+    if (st.size > MAX_BYTES) { skipped++; return; }
+    if (budgeted && extraBytes + st.size > EXTRA_BUDGET) { skipped++; return; }
+    const text = fs.readFileSync(abs, 'utf8');
+    // Minified bundles are technically text and useless to read.
+    if (text.length > 20000 && text.length / (text.split('\n').length || 1) > 400) { skipped++; return; }
+    sources[rel] = text;
+    const n = Buffer.byteLength(text);
+    bytes += n;
+    if (budgeted) extraBytes += n;
+  } catch {
+    missing++; // moved, deleted, or not valid UTF-8; the viewer just won't offer it
+  }
+};
+
+for (const rel of mapped) take(rel, false); // graph files are never budgeted out
+for (const rel of extra) take(rel, true);
 
 const out = path.join(ROOT, 'data', name, 'sources.json');
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, JSON.stringify(sources));
-console.log(`${Object.keys(sources).length}/${paths.length} referenced files captured (${(bytes / 1e6).toFixed(2)} MB)`);
+const total = Object.keys(sources).length;
+console.log(
+  `${total} files captured, ${(bytes / 1e6).toFixed(2)} MB — ` +
+  `${mapped.length} on the graph, ${total - mapped.length} docs/manifests ` +
+  `(${(extraBytes / 1e6).toFixed(2)} MB of ${(EXTRA_BUDGET / 1e6).toFixed(0)} MB budget)`
+);
+if (skipped) console.log(`  ${skipped} too large / over budget / minified — skipped`);
 if (missing) console.log(`  ${missing} unreadable/missing — skipped`);
 console.log(`wrote ${path.relative(ROOT, out)}`);

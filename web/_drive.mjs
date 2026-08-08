@@ -108,6 +108,27 @@ const code = await page.evaluate(() => {
 await page.screenshot({ path: 'code-view.png' });
 await page.click('.code-head .close');
 
+// --- file explorer -----------------------------------------------------------
+// The point of the tree is reaching files the GRAPH never saw — a README has
+// no node, and before the explorer existed it was unreachable.
+await page.click('.files-toggle');
+await page.waitForSelector('.filetree .tree-row', { timeout: 10000 });
+await page.fill('.tree-head input', 'README');
+await page.waitForTimeout(400);
+await page.click('.tree-row.file');
+await page.waitForSelector('.code-pane .code-line', { timeout: 10000 });
+await page.waitForTimeout(500);
+const tree = await page.evaluate(() => ({
+  rows: document.querySelectorAll('.tree-row').length,
+  mapped: document.querySelectorAll('.tree-dot:not(.unmapped)').length,
+  unmapped: document.querySelectorAll('.tree-dot.unmapped').length,
+  openedPath: document.querySelector('.code-title .mono')?.textContent,
+  total: document.querySelector('.tree-foot')?.textContent?.trim(),
+}));
+await page.screenshot({ path: 'explorer.png' });
+await page.click('.code-head .close');
+await page.click('.files-toggle');
+
 // --- in-browser extraction: the whole pipeline in a worker -----------------
 // Drives the exact code path the folder picker uses, minus the picker.
 await page.click('.nav a[href="#/"]');
@@ -190,6 +211,7 @@ console.log(`rings      : ${rings.join(' | ')}`);
 console.log(`self-map   : ${selfStats} (${repoFiles.length} files extracted in-browser)`);
 console.log(`code       : ${code.lines} lines, ${code.hljs} highlight spans, ${code.marked} gutter marks; map reflowed to ${code.canvasWidth}px`);
 console.log(`mobile     : folder-btn=${folderBtnCount} (want 0) zip-btn=${zipBtnCount} (want 1); blast sheet top=${sheet.top}px width=${sheet.width}px`);
+console.log(`explorer   : ${tree.total}, ${tree.mapped} mapped / ${tree.unmapped} unmapped dots; opened non-graph file ${tree.openedPath}`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);
 console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, mobile-{atlas,detail,blast,code}.png`);
 if (errors.length) {

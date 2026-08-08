@@ -303,6 +303,26 @@ highlight.js, python + javascript only.
   code pane, then the selection, before exiting. Registered as a stack so
   future overlays can join it. Dynamic-imported, so the web build is unaffected.
 
+## File explorer
+
+`web/src/FileTree.jsx` + `lib/filetree.js`. The repo as a directory, beside the
+repo as a graph. Opens ANY readable file, not just graph nodes — that gap was
+the whole reason it exists: a dropped folder's README/compose/CI files have no
+nodes and were unreachable.
+- `corpus.js` now returns `{files, readable}`: `files` is what the extractor
+  parses (.py/.js/.jsx, mirroring extract/node.mjs exactly), `readable` is
+  every text file. Keep them in step or the browser and CLI graphs diverge.
+- `openPath` is separate state from `selected` on purpose. Most readable files
+  have no node, so routing them through the selection would mean inventing
+  graph entities that do not exist.
+- **Capture docs by FILENAME, not extension.** An extension whitelist
+  (.json/.txt/.yml) looked reasonable and pulled 17.6 MB of fixtures and data
+  dumps out of Aeon's setup trees — enough to quadruple the APK. Name patterns
+  plus a 2 MB budget give 142 files / 0.96 MB. Graph files are never budgeted out.
+- **Skip `.claude/`** (and `.idea`, `.vscode`, `.tox`): `.claude/worktrees`
+  holds whole COPIES of the repo, so the tree showed four identical README.md
+  rows and the top hit was a one-line worktree stub.
+
 ## Ground truth (bench/ground-truth/)
 
 `bench/ground-truth/aeon.graphify.canonical.json` is the COMMITTED graphify

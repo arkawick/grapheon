@@ -19,6 +19,7 @@ export function fetchedSources(manifest) {
   return {
     has: (p) => available.has(p),
     count: available.size,
+    paths: manifest.paths,
     async get(path) {
       if (cache.has(path)) return cache.get(path);
       if (!available.has(path)) return null;
@@ -39,6 +40,7 @@ export function inMemorySources(files) {
   return {
     has: (p) => map.has(p),
     count: map.size,
+    paths: [...map.keys()],
     async get(path) {
       return map.get(path) ?? null;
     },

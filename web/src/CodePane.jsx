@@ -2,13 +2,24 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import hljs from 'highlight.js/lib/core';
 import python from 'highlight.js/lib/languages/python';
 import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
 import 'highlight.js/styles/github-dark.css';
-import { lineOf } from './lib/sources.js';
 
 hljs.registerLanguage('python', python);
 hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('json', json);
 
-const LANG_BY_EXT = { '.py': 'python', '.js': 'javascript', '.jsx': 'javascript' };
+import { lineOf } from './lib/sources.js';
+
+// Everything else renders as plain text — readable, just uncoloured. Adding
+// languages means importing more hljs grammars, which is a size decision, not
+// a correctness one.
+const LANG_BY_EXT = {
+  '.py': 'python',
+  '.js': 'javascript', '.jsx': 'javascript',
+  '.mjs': 'javascript', '.cjs': 'javascript',
+  '.json': 'json',
+};
 
 /**
  * Highlight the whole file, then split into lines.
@@ -53,15 +64,22 @@ function escapeHtml(s) {
   return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 }
 
-export default function CodePane({ node, sources, onClose, related = [] }) {
+/**
+ * @param {{path: string, title?: string, line?: number|null, hue?: number|null}} file
+ *   A file to display. `line` and `hue` come from the graph when a node was
+ *   selected, and are simply absent when the file was opened from the tree —
+ *   plain files (README, compose.yml) have no entity to jump to, and that is
+ *   a normal case rather than a degraded one.
+ */
+export default function CodePane({ file, sources, onClose, related = [] }) {
   const [text, setText] = useState(null);
   const [error, setError] = useState(null);
   // Wrapping defaults ON for narrow screens: a phone shows ~45 columns, and
   // this file needs 706px of horizontal scroll to read one line otherwise.
   const [wrap, setWrap] = useState(() => window.innerWidth <= 720);
   const scrollRef = useRef(null);
-  const path = node?.a?.path ?? null;
-  const line = lineOf(node?.a?.loc);
+  const path = file?.path ?? null;
+  const line = file?.line ?? null;
 
   useEffect(() => {
     if (!path || !sources) { setText(null); return; }
@@ -105,14 +123,17 @@ export default function CodePane({ node, sources, onClose, related = [] }) {
     }
   }, [lines, line]);
 
-  if (!node) return null;
+  if (!file) return null;
 
   return (
     <section className="code-pane">
       <header className="code-head">
         <div className="code-title">
-          <span className="dot" style={{ background: `hsl(${node.h} 68% 62%)` }} />
-          <strong>{node.l}</strong>
+          <span
+            className={`dot${file.hue == null ? ' unmapped' : ''}`}
+            style={file.hue != null ? { background: `hsl(${file.hue} 68% 62%)` } : undefined}
+          />
+          <strong>{file.title ?? path.slice(path.lastIndexOf('/') + 1)}</strong>
           {path && <span className="mono dim">{path}{line ? `:${line}` : ''}</span>}
         </div>
         <button
@@ -125,7 +146,6 @@ export default function CodePane({ node, sources, onClose, related = [] }) {
         <button className="close" onClick={onClose} aria-label="Close code">×</button>
       </header>
 
-      {!path && <p className="dim empty">This node has no file — it's an external module.</p>}
       {path && !text && !error && <p className="dim empty">Loading source…</p>}
       {error && <p className="dim empty">{error}</p>}
 

@@ -1,16 +1,53 @@
 /**
- * Turn a picked/dropped folder into the worker's input: [{path, src}].
+ * Turn a picked/dropped folder or zip into two things:
  *
- * Filters mirror extract/node.mjs — same extensions, same skip list — so the
- * browser and CLI paths describe the same corpus for the same repo.
+ *   parseable — [{path, src}] for the extractor. Mirrors extract/node.mjs
+ *               exactly (same extensions, same skip list), so the browser and
+ *               CLI describe the same graph for the same repo.
+ *   readable  — every text file, for the file explorer. A repo is not only its
+ *               parseable source: README, package.json, Dockerfile and the
+ *               compose/CI YAML are usually the FIRST things you read to
+ *               understand an unfamiliar codebase, and filtering them out at
+ *               ingest made them permanently invisible.
+ *
+ * The extra files cost nothing at ingest — they are already in memory; we were
+ * simply discarding them.
  */
-const EXTS = new Set(['.py', '.js', '.jsx']);
+const PARSEABLE = new Set(['.py', '.js', '.jsx']);
+
+// Readable-but-not-parseable: config, docs, and the shape of the project.
+const READABLE = new Set([
+  ...PARSEABLE,
+  '.ts', '.tsx', '.mjs', '.cjs', '.json', '.md', '.markdown', '.rst', '.txt',
+  '.yml', '.yaml', '.toml', '.ini', '.cfg', '.conf', '.env', '.example',
+  '.sh', '.bash', '.ps1', '.bat', '.sql', '.html', '.css', '.scss',
+  '.gradle', '.properties', '.xml', '.gitignore', '.dockerignore',
+]);
+// Extensionless files worth reading, matched on basename.
+const READABLE_NAMES = new Set([
+  'Dockerfile', 'Makefile', 'LICENSE', 'README', 'CHANGELOG', 'Procfile',
+  '.gitignore', '.dockerignore', '.env', '.env.example',
+]);
+
 const SKIP_DIRS = new Set([
   '.git', 'node_modules', 'graphify-out', '__pycache__', 'dist', '.venv', 'venv',
+  'build', '.next', '.gradle', 'target', 'coverage', 'out',
+  // Tooling scratch space — `.claude/worktrees` holds whole copies of the
+  // repo, which would show up as duplicate files throughout the tree.
+  '.claude', '.idea', '.vscode', '.pytest_cache', '.mypy_cache', '.tox', '.cache',
 ]);
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // a 2 MB source file is not source
 
-const ext = (name) => name.slice(name.lastIndexOf('.'));
+const ext = (name) => {
+  const i = name.lastIndexOf('.');
+  const slash = name.lastIndexOf('/');
+  return i > slash ? name.slice(i) : '';
+};
+const base = (p) => p.slice(p.lastIndexOf('/') + 1);
+
+const isReadable = (p) => READABLE.has(ext(p)) || READABLE_NAMES.has(base(p));
+const isParseable = (p) => PARSEABLE.has(ext(p));
+const skipped = (p) => p.split('/').some((seg) => SKIP_DIRS.has(seg));
 
 /**
  * Bundled/minified output masquerading as source. A 470 KB one-line index.js
@@ -20,6 +57,14 @@ const ext = (name) => name.slice(name.lastIndexOf('.'));
 const looksMinified = (src) =>
   src.length > 20000 && src.length / (src.split('\n').length || 1) > 400;
 
+/** Split a readable set into what the extractor should see. */
+function partition(files) {
+  return {
+    files: files.filter((f) => isParseable(f.path)),
+    readable: files,
+  };
+}
+
 /** From an <input webkitdirectory> FileList. */
 export async function filesFromFileList(fileList) {
   const out = [];
@@ -27,14 +72,13 @@ export async function filesFromFileList(fileList) {
     // webkitRelativePath is "repoName/sub/dir/file.py"; drop the root segment
     // so paths match what the CLI produces relative to the repo.
     const rel = (f.webkitRelativePath || f.name).split('/').slice(1).join('/');
-    if (!rel || !EXTS.has(ext(rel))) continue;
-    if (rel.split('/').some((seg) => SKIP_DIRS.has(seg))) continue;
+    if (!rel || !isReadable(rel) || skipped(rel)) continue;
     if (f.size > MAX_FILE_BYTES) continue;
     const src = await f.text();
     if (looksMinified(src)) continue;
     out.push({ path: rel, src });
   }
-  return out;
+  return partition(out);
 }
 
 /** Repo name guess from the FileList (the folder the user picked). */
@@ -54,8 +98,8 @@ export async function filesFromZip(file) {
   const entries = unzipSync(buf, {
     filter: (f) =>
       !f.name.endsWith('/') &&
-      EXTS.has(ext(f.name)) &&
-      !f.name.split('/').some((seg) => SKIP_DIRS.has(seg)) &&
+      isReadable(f.name) &&
+      !skipped(f.name) &&
       f.originalSize <= MAX_FILE_BYTES,
   });
   const paths = Object.keys(entries);
@@ -65,12 +109,13 @@ export async function filesFromZip(file) {
   const roots = new Set(paths.map((p) => p.split('/')[0]));
   const strip = roots.size === 1 && paths.every((p) => p.includes('/'));
 
-  return paths
+  const all = paths
     .map((p) => ({
       path: strip ? p.split('/').slice(1).join('/') : p,
       src: strFromU8(entries[p]),
     }))
     .filter((f) => !looksMinified(f.src));
+  return partition(all);
 }
 
 /** "myrepo-main.zip" -> "myrepo-main". */

@@ -157,6 +157,27 @@ Debug builds on the host still work if you have a JDK + SDK:
 The app is the static site verbatim — extraction runs in the WebView's
 worker, on-device, offline.
 
+## File explorer
+
+**Files** in the sidebar opens the repo as a directory tree beside the map.
+Every readable file is there — including the ones the extractor never parsed,
+which is the point: a README, `package.json`, `docker-compose.yml` or a CI
+workflow has no graph node, and before the explorer they were unreachable
+even though you had just handed the app the whole folder.
+
+Files that *are* on the map carry a dot in their community's colour; files
+that aren't get a hollow one. So the tree and the graph are visibly the same
+repository seen two ways, and selecting a node reveals it in the tree.
+
+Reading order is nav rail → tree → map → code, the same left-to-right layout
+every editor uses.
+
+For a dropped folder or zip this costs nothing — those files were already in
+memory and were simply being discarded. For prebuilt corpora, docs and
+manifests are captured up to a **2 MB budget** on top of the graph's own
+files, chosen by filename rather than extension (an extension whitelist looked
+sensible and swept in 17.6 MB of data dumps).
+
 ## Code viewer
 
 Select any entity and hit **View code** — the map shrinks left, the source

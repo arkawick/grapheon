@@ -17,7 +17,7 @@ const NAV = [
 ];
 
 export default function Sidebar() {
-  const { layout, corpusName, extractRepo, busy } = useGraph();
+  const { layout, corpusName, extractRepo, busy, sources, treeOpen, setTreeOpen } = useGraph();
   const pickerRef = useRef(null);
   const zipRef = useRef(null);
 
@@ -54,6 +54,15 @@ export default function Sidebar() {
           </li>
         ))}
       </ul>
+
+      {sources && (
+        <button
+          className={`files-toggle${treeOpen ? ' on' : ''}`}
+          onClick={() => setTreeOpen((o) => !o)}
+        >
+          Files <span className="dim">{sources.count}</span>
+        </button>
+      )}
 
       <div className="open-repo">
         {HAS_DIR_PICKER && (

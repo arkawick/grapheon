@@ -6,7 +6,8 @@ import Sidebar from './components/Sidebar.jsx';
 import AtlasPage from './pages/AtlasPage.jsx';
 import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
 import CodePane from './CodePane.jsx';
-import { fetchedSources, inMemorySources } from './lib/sources.js';
+import FileTree from './FileTree.jsx';
+import { fetchedSources, inMemorySources, lineOf } from './lib/sources.js';
 import { onBackButton } from './lib/backButton.js';
 
 const DEFAULT_CORPUS = 'aeon';
@@ -59,6 +60,12 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [sources, setSources] = useState(null);   // source-text origin, or null
   const [codeOpen, setCodeOpen] = useState(false);
+  const [treeOpen, setTreeOpen] = useState(false);
+  // A file opened from the TREE rather than from a graph node. Kept separate
+  // from `selected` because most readable files (README, compose.yml) have no
+  // node at all, and forcing them through the selection would mean inventing
+  // graph entities that do not exist.
+  const [openPath, setOpenPath] = useState(null);
 
   // --- default corpus ------------------------------------------------------
   useEffect(() => {
@@ -124,7 +131,11 @@ export default function App() {
   }, [adjacency, corpus]);
 
   // --- in-browser extraction ----------------------------------------------
-  const extractRepo = useCallback((files, name) => {
+  const extractRepo = useCallback((input, name) => {
+    // Accepts either a bare file list (the automation hook) or the
+    // {files, readable} split the pickers produce.
+    const files = Array.isArray(input) ? input : input.files;
+    const readable = Array.isArray(input) ? input : input.readable;
     if (!files.length) {
       setError('No parseable files found (looked for .py, .js, .jsx).');
       return;
@@ -148,9 +159,10 @@ export default function App() {
       else if (msg.type === 'result') {
         setBusy(null);
         setCorpus({ name, layout: msg.layout, edges: msg.edges });
-        // The files are already in memory here — the worker just parsed them —
-        // so the code viewer costs nothing for a browser-extracted corpus.
-        setSources(inMemorySources(files));
+        // Already in memory — the worker just parsed them — so the code viewer
+        // costs nothing here. `readable` is the wider set: every text file,
+        // including the ones the extractor never parsed.
+        setSources(inMemorySources(readable));
         w.terminate();
         workerRef.current = null;
       } else if (msg.type === 'error') {
@@ -165,13 +177,14 @@ export default function App() {
 
   useEffect(() => () => workerRef.current?.terminate(), []);
 
-  // Android back dismisses the top layer — code pane, then selection — before
-  // it is allowed to leave the app.
+  // Android back dismisses the top layer — code, then tree, then selection —
+  // before it is allowed to leave the app.
   useEffect(() => onBackButton(() => {
-    if (codeOpen) { setCodeOpen(false); return true; }
+    if (codeOpen) { setCodeOpen(false); setOpenPath(null); return true; }
+    if (treeOpen) { setTreeOpen(false); return true; }
     if (selected) { setSelected(null); return true; }
     return false;
-  }), [codeOpen, selected]);
+  }), [codeOpen, treeOpen, selected]);
 
   // Deterministic entry point for automation (and a handy console API):
   // window.__loadRepoFiles([{path, src}], 'name') drives the exact same path
@@ -203,6 +216,8 @@ export default function App() {
   // where its neighbours are defined.
   const relatedInFile = useMemo(() => {
     if (!selected?.a?.path || !adjacency) return [];
+    // Gutter marks only make sense when the open file is the selection's file;
+    // browsing away to a README shouldn't carry another file's markers.
     const out = [];
     for (const link of adjacency.get(selected.id) ?? []) {
       const n = nodeById.get(link.id);
@@ -211,23 +226,68 @@ export default function App() {
     return out;
   }, [selected, adjacency, nodeById]);
 
+  // One file node per path, for the tree's colour dots and for jumping from a
+  // file back onto the map. Prefer the FILE node (loc L1) over an entity that
+  // merely lives in the same file.
+  const nodeByPath = useMemo(() => {
+    const m = new Map();
+    for (const n of corpus?.layout.nodes ?? []) {
+      const p = n.a?.path;
+      if (!p) continue;
+      const existing = m.get(p);
+      if (!existing || lineOf(n.a?.loc) === 1) m.set(p, n);
+    }
+    return m;
+  }, [corpus]);
+
+  /** Open a file from the tree — no graph node required. */
+  const openFile = useCallback((path) => {
+    setOpenPath(path);
+    setCodeOpen(true);
+  }, []);
+
+  // What the code pane shows: a tree-opened file wins while it is set,
+  // otherwise the selected node's file.
+  const openedFile = useMemo(() => {
+    if (openPath) {
+      const n = nodeByPath.get(openPath);
+      return { path: openPath, title: openPath.slice(openPath.lastIndexOf('/') + 1), line: null, hue: n?.h ?? null };
+    }
+    if (selected?.a?.path) {
+      return { path: selected.a.path, title: selected.l, line: lineOf(selected.a.loc), hue: selected.h };
+    }
+    return null;
+  }, [openPath, selected, nodeByPath]);
+
   const value = useMemo(() => ({
     layout: corpus?.layout ?? null,
     corpusName: corpus?.name ?? null,
-    adjacency, ensureAdjacency, nodeById,
+    adjacency, ensureAdjacency, nodeById, nodeByPath,
     selected, setSelected, focus, highlight, setKindFilter,
     extractRepo, busy,
-    sources, codeOpen, setCodeOpen,
-  }), [corpus, adjacency, ensureAdjacency, nodeById, selected, focus, highlight,
-       setKindFilter, extractRepo, busy, sources, codeOpen]);
+    sources, codeOpen, setCodeOpen, treeOpen, setTreeOpen, openFile,
+  }), [corpus, adjacency, ensureAdjacency, nodeById, nodeByPath, selected, focus, highlight,
+       setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile]);
 
   const layout = corpus?.layout;
 
   return (
     <HashRouter>
       <GraphContext.Provider value={value}>
-        <div className={`app${codeOpen && selected ? ' code-open' : ''}`}>
+        <div className={`app${codeOpen && openedFile ? ' code-open' : ''}${treeOpen ? ' tree-open' : ''}`}>
+          {/* Order is nav rail -> file tree -> map -> code: the same left-to-right
+              reading order every editor uses, so the layout needs no learning. */}
           <Sidebar />
+
+          {treeOpen && sources && (
+            <FileTree
+              paths={[...sources.paths].sort()}
+              nodeByPath={nodeByPath}
+              current={openedFile?.path ?? null}
+              onPick={openFile}
+              onClose={() => setTreeOpen(false)}
+            />
+          )}
 
           <main className="stage">
             {/*
@@ -266,12 +326,12 @@ export default function App() {
           {/* Sibling of the stage, not a route: the code pane is a layout mode
               that works on every page, and the map must stay visible beside
               it — that side-by-side is the entire point. */}
-          {codeOpen && selected && (
+          {codeOpen && openedFile && (
             <CodePane
-              node={selected}
+              file={openedFile}
               sources={sources}
               related={relatedInFile}
-              onClose={() => setCodeOpen(false)}
+              onClose={() => { setCodeOpen(false); setOpenPath(null); }}
             />
           )}
         </div>
