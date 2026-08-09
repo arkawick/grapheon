@@ -339,6 +339,16 @@ graph), `worker/knowledge-worker.js`, `pages/KnowledgePage.jsx`.
 **PDF** (`lib/knowledge/pdf.js`) converts to markdown-ish text — headings by
 font size vs the document's median — so `parseDocument` handles a PDF exactly
 like a `.md`. Three traps, each cost a round:
+- **Use the LEGACY pdf.js build** (`pdfjs-dist/legacy/build/...`). The default
+  one calls `Uint8Array.prototype.toHex()` when fingerprinting a document — an
+  ES2025 method — and dies with "hashOriginal.toHex is not a function" on any
+  browser that lacks it. Legacy ships the polyfill; it costs 56 KB.
+  **This passed every test and still broke for the user**: Playwright's bundled
+  Chromium is newer than most real browsers and than many Android WebViews, so
+  the feature was present in CI and absent in reality. The drive now DELETES
+  `Uint8Array.prototype.toHex` before parsing the PDF fixture, which is the
+  only reason that check can catch this class of bug. Assume the test browser
+  is more modern than your users' and prefer legacy/transpiled builds.
 - **pdf.js must run on the MAIN THREAD.** It spawns a worker of its own, and
   nesting that inside the knowledge worker made `getDocument()` hang forever
   with no error — the promise simply never settled. App converts PDFs, then

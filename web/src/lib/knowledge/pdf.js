@@ -25,10 +25,19 @@ let pdfjs = null;
 
 async function load() {
   if (pdfjs) return pdfjs;
-  const lib = await import('pdfjs-dist');
+  // The LEGACY build, deliberately. The default one calls
+  // `Uint8Array.prototype.toHex()` when fingerprinting a document — an ES2025
+  // method that only very recent browsers have — and crashes with
+  // "hashOriginal.toHex is not a function" everywhere else. The legacy build
+  // ships the polyfill.
+  //
+  // This did not show up in testing because Playwright's bundled Chromium is
+  // newer than most real browsers and than many Android WebViews: the feature
+  // was present there and absent for the user. Prefer the legacy build for
+  // anything shipped.
+  const lib = await import('pdfjs-dist/legacy/build/pdf.mjs');
   // Vite turns this into an asset URL; pdf.js then spawns its own worker.
-  // Nested workers are fine in Chromium (so, in the Android WebView too).
-  const workerUrl = (await import('pdfjs-dist/build/pdf.worker.mjs?url')).default;
+  const workerUrl = (await import('pdfjs-dist/legacy/build/pdf.worker.mjs?url')).default;
   lib.GlobalWorkerOptions.workerSrc = workerUrl;
   pdfjs = lib;
   return lib;

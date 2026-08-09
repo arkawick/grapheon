@@ -466,7 +466,14 @@ export default function App() {
             {error && (
               <div className="status error">
                 {error}
-                <div className="hint">Run: npm run build:graph</div>
+                {/* The hint used to be hardcoded to "Run: npm run build:graph",
+                    which is only advice for a missing corpus — it was appended
+                    to PDF and worker failures too, where it is actively
+                    misleading. */}
+                {/^(layout|edges)\b/.test(error) && (
+                  <div className="hint">Run: npm run build:graph</div>
+                )}
+                <button className="dismiss" onClick={() => setError(null)}>Dismiss</button>
               </div>
             )}
 

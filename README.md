@@ -172,6 +172,10 @@ One real limit: a **scanned PDF has no text layer** — it's images of text —
 and is skipped with a message saying so rather than silently contributing
 nothing. Extracting it would need OCR, which is a different project.
 
+(The *legacy* pdf.js build is used deliberately: the default one calls
+`Uint8Array.prototype.toHex()`, an ES2025 method that many browsers and
+Android WebViews don't have yet.)
+
 - Documents are split **document → section → passage**. Sections become graph
   nodes; passages are what search ranks. One node per paragraph would make an
   unreadable map, and a retriever that only returns whole documents is useless.

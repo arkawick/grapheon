@@ -218,6 +218,20 @@ const mdFiles = repoFiles.length ? [] : [];
 // heuristic are exercised on every run.
 const { makeTestPdf } = await import('./_fixture-pdf.mjs');
 const pdfBytes = [...makeTestPdf()];
+
+// Reproduce an ordinary browser. Playwright's bundled Chromium ships
+// Uint8Array.prototype.toHex (ES2025); most real browsers and Android WebViews
+// do not, and pdf.js's default build calls it while fingerprinting a document
+// — "hashOriginal.toHex is not a function". Removing it here is what makes
+// this check able to catch that class of bug at all, instead of passing on a
+// browser newer than the users'.
+await page.waitForLoadState('domcontentloaded');
+await page.waitForTimeout(300);
+const hadToHex = await page.evaluate(() => {
+  const had = typeof Uint8Array.prototype.toHex === 'function';
+  delete Uint8Array.prototype.toHex;
+  return had;
+});
 await page.evaluate(({ docs, pdf }) => window.__ingestDocuments(
   [...docs, { path: 'retrieval.pdf', data: new Uint8Array(pdf).buffer }],
   'grapheon-docs'
@@ -366,7 +380,8 @@ console.log(`dividers   : ${resize.count} handles; drag -140px took code ${resiz
 console.log(`search     : ${searchFoot} in ${searchMs}ms (cold); hit jumped to ${jumped.path} line ${jumped.target}`);
 console.log(`tabs       : [${tabsInfo.open.join(', ')}] active=${tabsInfo.active}`);
 console.log(`knowledge  : ${kb.stats}; ${kb.nodes}; ${kb.hits} hits, ${kb.marks} highlights, top="${kb.top}" -> ${kb.opened}`);
-console.log(`pdf        : ${pdfHit ? `indexed, hit "${pdfHit.heading}" at ${pdfHit.source}` : 'NO HIT — pdf text did not reach the index'}`);
+console.log(`pdf        : ${pdfHit ? `indexed, hit "${pdfHit.heading}" at ${pdfHit.source}` : 'NO HIT — pdf text did not reach the index'}`
+  + ` (parsed with Uint8Array.toHex removed${hadToHex ? '' : '; runtime lacked it anyway'})`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);
 console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, mobile-{atlas,detail,blast,code}.png`);
 if (errors.length) {
