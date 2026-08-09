@@ -7,6 +7,7 @@ import AtlasPage from './pages/AtlasPage.jsx';
 import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
 import CodePane from './CodePane.jsx';
 import FileTree from './FileTree.jsx';
+import SearchPanel from './SearchPanel.jsx';
 import { fetchedSources, inMemorySources, lineOf } from './lib/sources.js';
 import { onBackButton } from './lib/backButton.js';
 
@@ -61,10 +62,16 @@ export default function App() {
   const [sources, setSources] = useState(null);   // source-text origin, or null
   const [codeOpen, setCodeOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
-  // A file opened from the TREE rather than from a graph node. Kept separate
-  // from `selected` because most readable files (README, compose.yml) have no
-  // node at all, and forcing them through the selection would mean inventing
-  // graph entities that do not exist.
+  const [searchOpen, setSearchOpen] = useState(false);
+  // Files opened from the TREE or SEARCH rather than from a graph node. Kept
+  // separate from `selected` because most readable files (README, compose.yml)
+  // have no node at all, and forcing them through the selection would mean
+  // inventing graph entities that do not exist.
+  //
+  // A list, not a single path: `tabs` is the open set, `openPath` is which one
+  // is showing. A tab remembers the line it was opened at, so returning to a
+  // search hit lands where you left it.
+  const [tabs, setTabs] = useState([]);   // [{path, line}]
   const [openPath, setOpenPath] = useState(null);
 
   // --- default corpus ------------------------------------------------------
@@ -180,11 +187,12 @@ export default function App() {
   // Android back dismisses the top layer — code, then tree, then selection —
   // before it is allowed to leave the app.
   useEffect(() => onBackButton(() => {
-    if (codeOpen) { setCodeOpen(false); setOpenPath(null); return true; }
+    if (codeOpen) { setCodeOpen(false); setOpenPath(null); setTabs([]); return true; }
+    if (searchOpen) { setSearchOpen(false); return true; }
     if (treeOpen) { setTreeOpen(false); return true; }
     if (selected) { setSelected(null); return true; }
     return false;
-  }), [codeOpen, treeOpen, selected]);
+  }), [codeOpen, searchOpen, treeOpen, selected]);
 
   // Deterministic entry point for automation (and a handy console API):
   // window.__loadRepoFiles([{path, src}], 'name') drives the exact same path
@@ -240,10 +248,33 @@ export default function App() {
     return m;
   }, [corpus]);
 
-  /** Open a file from the tree — no graph node required. */
-  const openFile = useCallback((path) => {
+  /** Open a file from the tree or a search hit — no graph node required. */
+  const openFile = useCallback((path, line = null) => {
+    setTabs((prev) => {
+      const i = prev.findIndex((t) => t.path === path);
+      if (i === -1) return [...prev, { path, line }];
+      // Re-opening at a new line (a different search hit) should move there.
+      if (line == null || prev[i].line === line) return prev;
+      const next = [...prev];
+      next[i] = { path, line };
+      return next;
+    });
     setOpenPath(path);
     setCodeOpen(true);
+  }, []);
+
+  const closeTab = useCallback((path) => {
+    setTabs((prev) => {
+      const i = prev.findIndex((t) => t.path === path);
+      const next = prev.filter((t) => t.path !== path);
+      setOpenPath((cur) => {
+        if (cur !== path) return cur;
+        // Fall back to the neighbour on the left, the way editors do.
+        return next.length ? next[Math.max(0, i - 1)].path : null;
+      });
+      if (!next.length) setCodeOpen(false);
+      return next;
+    });
   }, []);
 
   // What the code pane shows: a tree-opened file wins while it is set,
@@ -251,13 +282,19 @@ export default function App() {
   const openedFile = useMemo(() => {
     if (openPath) {
       const n = nodeByPath.get(openPath);
-      return { path: openPath, title: openPath.slice(openPath.lastIndexOf('/') + 1), line: null, hue: n?.h ?? null };
+      const tab = tabs.find((t) => t.path === openPath);
+      return {
+        path: openPath,
+        title: openPath.slice(openPath.lastIndexOf('/') + 1),
+        line: tab?.line ?? null,
+        hue: n?.h ?? null,
+      };
     }
     if (selected?.a?.path) {
       return { path: selected.a.path, title: selected.l, line: lineOf(selected.a.loc), hue: selected.h };
     }
     return null;
-  }, [openPath, selected, nodeByPath]);
+  }, [openPath, tabs, selected, nodeByPath]);
 
   const value = useMemo(() => ({
     layout: corpus?.layout ?? null,
@@ -266,8 +303,9 @@ export default function App() {
     selected, setSelected, focus, highlight, setKindFilter,
     extractRepo, busy,
     sources, codeOpen, setCodeOpen, treeOpen, setTreeOpen, openFile,
+    searchOpen, setSearchOpen,
   }), [corpus, adjacency, ensureAdjacency, nodeById, nodeByPath, selected, focus, highlight,
-       setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile]);
+       setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile, searchOpen]);
 
   const layout = corpus?.layout;
 
@@ -286,6 +324,14 @@ export default function App() {
               current={openedFile?.path ?? null}
               onPick={openFile}
               onClose={() => setTreeOpen(false)}
+            />
+          )}
+
+          {searchOpen && sources && (
+            <SearchPanel
+              sources={sources}
+              onOpen={openFile}
+              onClose={() => setSearchOpen(false)}
             />
           )}
 
@@ -331,7 +377,10 @@ export default function App() {
               file={openedFile}
               sources={sources}
               related={relatedInFile}
-              onClose={() => { setCodeOpen(false); setOpenPath(null); }}
+              tabs={tabs}
+              onSelectTab={setOpenPath}
+              onCloseTab={closeTab}
+              onClose={() => { setCodeOpen(false); setOpenPath(null); setTabs([]); }}
             />
           )}
         </div>

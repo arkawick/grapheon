@@ -533,3 +533,66 @@ canvas {
   .files-toggle { margin: 0; padding: 6px 10px; white-space: nowrap; }
   .tree-row { padding-top: 6px; padding-bottom: 6px; }
 }
+
+/* --- tabs ------------------------------------------------------------------ */
+.tabs {
+  display: flex; overflow-x: auto; flex-shrink: 0;
+  background: #0a0a10; border-bottom: 1px solid var(--border);
+  scrollbar-width: thin;
+}
+.tab {
+  display: flex; align-items: center; flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  border-top: 2px solid transparent;
+}
+.tab.active { background: #0d0d14; border-top-color: var(--accent); }
+.tab-label {
+  padding: 6px 4px 6px 10px; max-width: 160px;
+  background: none; border: 0; color: var(--dim);
+  font: inherit; font-size: 12px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tab.active .tab-label { color: var(--text); }
+.tab-close {
+  padding: 0 8px 0 4px; background: none; border: 0;
+  color: var(--dim); font-size: 15px; line-height: 1; cursor: pointer;
+}
+.tab-close:hover { color: var(--text); }
+
+/* --- cross-file search ------------------------------------------------------ */
+.searchpanel {
+  display: flex; flex-direction: column;
+  width: 300px; flex-shrink: 0;
+  background: #0b0b11; border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+.hit-file { padding: 4px 0 6px; }
+.hit-path {
+  padding: 4px 8px; font-size: 11px; color: var(--accent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  direction: rtl; text-align: left;
+}
+.hit {
+  display: flex; gap: 8px; width: 100%; padding: 2px 8px;
+  background: none; border: 0; color: var(--dim);
+  font: inherit; text-align: left; cursor: pointer;
+}
+.hit:hover { background: rgba(255, 255, 255, 0.06); }
+.hit-line { flex-shrink: 0; width: 34px; text-align: right; font-size: 11px; color: #4a4a5e; }
+.hit-text {
+  font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hit-text mark { background: rgba(253, 224, 71, 0.25); color: #fde047; }
+
+.explore-toggles { display: flex; gap: 6px; margin: 0 8px 8px; }
+.explore-toggles .files-toggle { margin: 0; flex: 1; }
+
+@media (max-width: 720px) {
+  .searchpanel {
+    position: absolute; inset: 0; z-index: 4; width: auto;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .explore-toggles { margin: 0; }
+  .hit { padding-top: 5px; padding-bottom: 5px; }
+}

@@ -170,7 +170,15 @@ that aren't get a hollow one. So the tree and the graph are visibly the same
 repository seen two ways, and selecting a node reveals it in the tree.
 
 Reading order is nav rail → tree → map → code, the same left-to-right layout
-every editor uses.
+every editor uses. **Tabs** appear once a second file is open (a lone tab is
+noise above a header that already names the file), and closing one falls back
+to its left neighbour.
+
+**Search** scans the contents of every readable file — the question the graph
+can't answer, like *where does `AZURE_OPENAI_ENDPOINT` appear*. Results stream
+in grouped by file with the match highlighted; clicking a hit opens that file
+at that line. A cold search over Aeon's 142 files takes ~3s (each file is
+fetched once), and every search after that is ~100ms.
 
 For a dropped folder or zip this costs nothing — those files were already in
 memory and were simply being discarded. For prebuilt corpora, docs and

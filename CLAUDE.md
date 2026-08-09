@@ -322,6 +322,15 @@ nodes and were unreachable.
 - **Skip `.claude/`** (and `.idea`, `.vscode`, `.tox`): `.claude/worktrees`
   holds whole COPIES of the repo, so the tree showed four identical README.md
   rows and the top hit was a one-line worktree stub.
+- **Tabs** live in App (`tabs` = open set, `openPath` = which is showing); each
+  tab remembers the line it was opened at so returning to a search hit lands
+  where you left it. The bar hides at one tab by design — the drive asserting
+  `tabs: []` after a close is that, not a bug.
+- **Cross-file search fetches in BATCHES of 12** (`lib/search.js`). Awaiting
+  each file sequentially made a cold search take **25 SECONDS** over 142 files
+  — one round trip each, plus a per-file `setTimeout(0)` browsers clamp to
+  ~4ms. Batched: ~3s cold, ~110ms warm. If search ever feels slow again,
+  check the concurrency before anything else.
 
 ## Ground truth (bench/ground-truth/)
 

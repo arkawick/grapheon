@@ -71,7 +71,10 @@ function escapeHtml(s) {
  *   plain files (README, compose.yml) have no entity to jump to, and that is
  *   a normal case rather than a degraded one.
  */
-export default function CodePane({ file, sources, onClose, related = [] }) {
+export default function CodePane({
+  file, sources, onClose, related = [],
+  tabs = [], onSelectTab, onCloseTab,
+}) {
   const [text, setText] = useState(null);
   const [error, setError] = useState(null);
   // Wrapping defaults ON for narrow screens: a phone shows ~45 columns, and
@@ -127,6 +130,37 @@ export default function CodePane({ file, sources, onClose, related = [] }) {
 
   return (
     <section className="code-pane">
+      {/* Tabs only appear once more than one file is open — a single tab is
+          noise above a header that already names the file. */}
+      {tabs.length > 1 && (
+        <div className="tabs" role="tablist">
+          {tabs.map((t) => {
+            const name = t.path.slice(t.path.lastIndexOf('/') + 1);
+            const active = t.path === file.path;
+            return (
+              <div key={t.path} className={`tab${active ? ' active' : ''}`}>
+                <button
+                  className="tab-label"
+                  role="tab"
+                  aria-selected={active}
+                  title={t.path}
+                  onClick={() => onSelectTab?.(t.path)}
+                >
+                  {name}
+                </button>
+                <button
+                  className="tab-close"
+                  aria-label={`Close ${name}`}
+                  onClick={() => onCloseTab?.(t.path)}
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <header className="code-head">
         <div className="code-title">
           <span

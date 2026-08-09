@@ -17,7 +17,10 @@ const NAV = [
 ];
 
 export default function Sidebar() {
-  const { layout, corpusName, extractRepo, busy, sources, treeOpen, setTreeOpen } = useGraph();
+  const {
+    layout, corpusName, extractRepo, busy, sources,
+    treeOpen, setTreeOpen, searchOpen, setSearchOpen,
+  } = useGraph();
   const pickerRef = useRef(null);
   const zipRef = useRef(null);
 
@@ -56,12 +59,21 @@ export default function Sidebar() {
       </ul>
 
       {sources && (
-        <button
-          className={`files-toggle${treeOpen ? ' on' : ''}`}
-          onClick={() => setTreeOpen((o) => !o)}
-        >
-          Files <span className="dim">{sources.count}</span>
-        </button>
+        <div className="explore-toggles">
+          <button
+            className={`files-toggle${treeOpen ? ' on' : ''}`}
+            onClick={() => setTreeOpen((o) => !o)}
+          >
+            Files <span className="dim">{sources.count}</span>
+          </button>
+          <button
+            className={`files-toggle${searchOpen ? ' on' : ''}`}
+            onClick={() => setSearchOpen((o) => !o)}
+            title="Search across file contents"
+          >
+            Search
+          </button>
+        </div>
       )}
 
       <div className="open-repo">

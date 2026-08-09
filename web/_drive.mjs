@@ -127,7 +127,44 @@ const tree = await page.evaluate(() => ({
 }));
 await page.screenshot({ path: 'explorer.png' });
 await page.click('.code-head .close');
-await page.click('.files-toggle');
+await page.click('.explore-toggles button:nth-child(1)');
+
+// --- cross-file search + tabs ------------------------------------------------
+// The question the graph cannot answer: where a literal string appears. Also
+// exercises tabs, since each hit opens another file.
+await page.click('.explore-toggles button:nth-child(2)');
+await page.waitForSelector('.searchpanel input', { timeout: 8000 });
+await page.fill('.searchpanel input', 'AZURE_OPENAI_ENDPOINT');
+const searchStart = Date.now();
+await page.waitForFunction(
+  () => (document.querySelector('.searchpanel .tree-foot')?.textContent ?? '').includes('matches in'),
+  { timeout: 60000 }
+);
+const searchMs = Date.now() - searchStart;
+const searchFoot = (await page.textContent('.searchpanel .tree-foot')).trim();
+
+// A hit opens its file AT that line.
+await page.click('.hit');
+await page.waitForSelector('.code-pane .code-line', { timeout: 10000 });
+await page.waitForTimeout(400);
+const jumped = await page.evaluate(() => ({
+  path: document.querySelector('.code-title .mono')?.textContent,
+  target: document.querySelector('.code-line.target')?.dataset.line,
+}));
+
+// A second file from another group gives us tabs.
+const groups = await page.$$('.hit-file');
+if (groups.length > 1) {
+  await groups[1].$eval('.hit', (el) => el.click());
+  await page.waitForTimeout(600);
+}
+const tabsInfo = await page.evaluate(() => ({
+  open: [...document.querySelectorAll('.tab-label')].map((e) => e.textContent),
+  active: document.querySelector('.tab.active .tab-label')?.textContent ?? null,
+}));
+await page.screenshot({ path: 'search-tabs.png' });
+await page.click('.code-head .close');
+await page.click('.explore-toggles button:nth-child(2)');
 
 // --- in-browser extraction: the whole pipeline in a worker -----------------
 // Drives the exact code path the folder picker uses, minus the picker.
@@ -212,6 +249,8 @@ console.log(`self-map   : ${selfStats} (${repoFiles.length} files extracted in-b
 console.log(`code       : ${code.lines} lines, ${code.hljs} highlight spans, ${code.marked} gutter marks; map reflowed to ${code.canvasWidth}px`);
 console.log(`mobile     : folder-btn=${folderBtnCount} (want 0) zip-btn=${zipBtnCount} (want 1); blast sheet top=${sheet.top}px width=${sheet.width}px`);
 console.log(`explorer   : ${tree.total}, ${tree.mapped} mapped / ${tree.unmapped} unmapped dots; opened non-graph file ${tree.openedPath}`);
+console.log(`search     : ${searchFoot} in ${searchMs}ms (cold); hit jumped to ${jumped.path} line ${jumped.target}`);
+console.log(`tabs       : [${tabsInfo.open.join(', ')}] active=${tabsInfo.active}`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);
 console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, mobile-{atlas,detail,blast,code}.png`);
 if (errors.length) {
