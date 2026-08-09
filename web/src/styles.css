@@ -743,3 +743,11 @@ body.resizing * { cursor: col-resize !important; }
   color: var(--text); font: inherit; font-size: 12px; cursor: pointer;
 }
 .status.error .dismiss:hover { background: rgba(255, 255, 255, 0.06); }
+
+/* --- logo -------------------------------------------------------------------
+   The mark replaced the word "Grapheon" in the brand slots. `.brand` was a
+   baseline-aligned text row; an image needs centre alignment or the corpus
+   badge sits oddly against it. */
+.logo { display: block; user-select: none; }
+.brand { align-items: center; }
+.menu-btn .logo { margin-left: 1px; }

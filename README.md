@@ -18,6 +18,7 @@ pipeline/   canonical graph -> Louvain -> ForceAtlas2 -> layout artifacts
 web/        the desktop/browser app: Vite + React + PixiJS. No backend.
 android/    the phone app: a Capacitor shell around web/dist, built in Docker
 docker/     Dockerfile + nginx.conf for the web app (see docker-compose.yml)
+scripts/    make-logo.mjs — every logo asset, generated from 86.svg
 bench/      the kill-test evidence (RESULTS.md) that justified the JS port
 data/       one directory per extracted corpus
 docs/       CONTRACT.md — the two JSON shapes everything meets at

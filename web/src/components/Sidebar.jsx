@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useGraph } from '../GraphContext.js';
+import Logo from './Logo.jsx';
 import {
   filesFromFileList, repoNameFromFileList,
   filesFromZip, repoNameFromZip, documentsFromFileList,
@@ -70,7 +71,7 @@ export default function Sidebar() {
         <header className="topbar-compact">
           <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
             <span className="menu-icon" aria-hidden="true"><i /><i /><i /></span>
-            <span className="brand-name">Grapheon</span>
+            <Logo height={18} />
           </button>
           <span className="current-page">{current.label}</span>
           {corpusName && <span className="corpus">{corpusName}</span>}
@@ -81,7 +82,7 @@ export default function Sidebar() {
 
       <nav className={`sidebar${narrow ? ' drawer' : ''}${menuOpen ? ' open' : ''}`}>
         <div className="brand">
-          Grapheon
+          <Logo height={22} />
           {corpusName && <span className="corpus">{corpusName}</span>}
           {narrow && (
             <button className="close drawer-close" onClick={close} aria-label="Close menu">×</button>

@@ -406,6 +406,28 @@ nodes and were unreachable.
   ~4ms. Batched: ~3s cold, ~110ms warm. If search ever feels slow again,
   check the concurrency before anything else.
 
+## Logo
+
+`86.svg` at the repo root is the SOURCE ART — an interlocking 86 monogram,
+one path, `fill="currentColor"`. Everything else is generated:
+
+```bash
+node scripts/make-logo.mjs      # then rebuild the APK for launcher icons
+```
+
+It writes `web/public/logo.svg` (natural 1.545:1, gradient baked in),
+`web/public/icon.svg` (square, dark tile, favicon) and every
+`android/.../mipmap-*` launcher PNG including the adaptive foreground.
+- **The mark is 1.545:1 and every icon slot is 1:1**, so the square variants
+  centre and inset it. Adaptive foregrounds get a much bigger margin (0.46 vs
+  0.74) because launchers crop to a circle inside the 108dp square.
+- Rasterising uses the **Playwright Chromium already installed**, not sharp or
+  node-canvas — one fewer dependency, and the same engine that renders it.
+- The gradient is `#7dd3fc → #60a5fa → #818cf8`, anchored on `--accent`.
+  Change it in one place (`STOPS`) and regenerate.
+- The favicon carries its own dark tile: the mark is light blue and a browser
+  tab strip may be white.
+
 ## Ground truth (bench/ground-truth/)
 
 `bench/ground-truth/aeon.graphify.canonical.json` is the COMMITTED graphify
