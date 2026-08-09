@@ -9,7 +9,7 @@ import { searchCorpus } from './lib/search.js';
  * fetched corpus the first search pulls each file over the network and the
  * user should see hits appear rather than a spinner.
  */
-export default function SearchPanel({ sources, onOpen, onClose }) {
+export default function SearchPanel({ sources, onOpen, onClose, width }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [stats, setStats] = useState(null);
@@ -45,7 +45,7 @@ export default function SearchPanel({ sources, onOpen, onClose }) {
   useEffect(() => () => abortRef.current?.abort(), []);
 
   return (
-    <aside className="searchpanel">
+    <aside className="searchpanel" style={width ? { width } : undefined}>
       <header className="tree-head">
         <input
           autoFocus

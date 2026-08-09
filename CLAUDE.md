@@ -326,6 +326,18 @@ nodes and were unreachable.
   tab remembers the line it was opened at so returning to a search hit lands
   where you left it. The bar hides at one tab by design — the drive asserting
   `tabs: []` after a close is that, not a bug.
+- **Resizable dividers** (`components/Divider.jsx`, `lib/usePanelWidths.js`):
+  pointer events + `setPointerCapture` so a drag survives outrunning the 5px
+  handle, widths persisted in localStorage and clamped ON READ (a stored
+  1200px pane from a wide session would otherwise swallow a laptop screen).
+  Two traps:
+  - **Inline width BEATS the media query.** Passing a width on a phone pinned
+    the full-screen code pane to the desktop's last drag (560px on a 390px
+    screen). `usePanelWidths` reports null below 720px so no inline style is
+    set; the drive's mobile pass asserts the 390px width.
+  - The canvas resize is **rAF-coalesced** — `_applyLOD` walks every sprite
+    (1038 on Aeon) and running it per ResizeObserver callback made the drag
+    stutter.
 - **Cross-file search fetches in BATCHES of 12** (`lib/search.js`). Awaiting
   each file sequentially made a cold search take **25 SECONDS** over 142 files
   — one round trip each, plus a per-file `setTimeout(0)` browsers clamp to

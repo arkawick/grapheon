@@ -596,3 +596,35 @@ canvas {
   .explore-toggles { margin: 0; }
   .hit { padding-top: 5px; padding-bottom: 5px; }
 }
+
+/* --- resizable dividers ----------------------------------------------------- */
+.divider {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: var(--border);
+  /* The handle is 5px but the grab area extends past it — a 5px target is
+     genuinely hard to hit, and every editor cheats this the same way. */
+  position: relative;
+  touch-action: none; /* or the browser scrolls instead of letting us drag */
+}
+.divider::after {
+  content: ''; position: absolute; inset: 0 -4px;
+}
+.divider:hover, body.resizing .divider { background: var(--accent); }
+
+/* While dragging, stop the pointer selecting text or turning into an I-beam
+   as it crosses panels. */
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing * { cursor: col-resize !important; }
+
+/* The map must never be squeezed to nothing, whatever the dividers say. */
+.stage { min-width: 200px; }
+
+/* The detail panel floats over the map, so on a narrowed stage it would cover
+   the whole thing. Cap it against its container rather than the window. */
+.panel, .detail { max-width: calc(100% - 32px); }
+
+@media (max-width: 720px) {
+  /* Panels are full-screen overlays on a phone; there is nothing to resize. */
+  .divider { display: none; }
+}

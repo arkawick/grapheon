@@ -160,12 +160,22 @@ export class AtlasRenderer {
     // shrinks this container without the window changing at all, so the canvas
     // would keep its old width and the map would be silently cropped —
     // measured: container ~750px, canvas still 1392px. Watch the element.
+    //
+    // Coalesced into one frame: dragging a divider fires this continuously,
+    // and _applyLOD walks every sprite (1038 of them on Aeon), so doing it per
+    // observer callback makes the drag stutter.
+    let resizePending = false;
     this._resizeObserver = new ResizeObserver(() => {
-      const { clientWidth: w, clientHeight: h } = this.container;
-      if (!w || !h || !this.app) return;
-      this.app.renderer.resize(w, h);
-      this.viewport.resize(w, h); // viewport tracks the screen box separately
-      this._applyLOD();
+      if (resizePending) return;
+      resizePending = true;
+      requestAnimationFrame(() => {
+        resizePending = false;
+        const { clientWidth: w, clientHeight: h } = this.container ?? {};
+        if (!w || !h || !this.app) return;
+        this.app.renderer.resize(w, h);
+        this.viewport.resize(w, h); // viewport tracks the screen box separately
+        this._applyLOD();
+      });
     });
     this._resizeObserver.observe(this.container);
 

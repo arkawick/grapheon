@@ -8,6 +8,8 @@ import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
 import CodePane from './CodePane.jsx';
 import FileTree from './FileTree.jsx';
 import SearchPanel from './SearchPanel.jsx';
+import Divider from './components/Divider.jsx';
+import { usePanelWidths, LIMITS } from './lib/usePanelWidths.js';
 import { fetchedSources, inMemorySources, lineOf } from './lib/sources.js';
 import { onBackButton } from './lib/backButton.js';
 
@@ -73,6 +75,7 @@ export default function App() {
   // search hit lands where you left it.
   const [tabs, setTabs] = useState([]);   // [{path, line}]
   const [openPath, setOpenPath] = useState(null);
+  const { widths, raw: rawWidths, narrow, set: setWidth, reset: resetWidth } = usePanelWidths();
 
   // --- default corpus ------------------------------------------------------
   useEffect(() => {
@@ -318,21 +321,43 @@ export default function App() {
           <Sidebar />
 
           {treeOpen && sources && (
-            <FileTree
-              paths={[...sources.paths].sort()}
-              nodeByPath={nodeByPath}
-              current={openedFile?.path ?? null}
-              onPick={openFile}
-              onClose={() => setTreeOpen(false)}
-            />
+            <>
+              <FileTree
+                width={widths.side}
+                paths={[...sources.paths].sort()}
+                nodeByPath={nodeByPath}
+                current={openedFile?.path ?? null}
+                onPick={openFile}
+                onClose={() => setTreeOpen(false)}
+              />
+              {!narrow && (
+                <Divider
+                  side="left" label="File tree width"
+                  width={rawWidths.side} min={LIMITS.side.min} max={LIMITS.side.max}
+                  onResize={(w) => setWidth('side', w)}
+                  onReset={() => resetWidth('side')}
+                />
+              )}
+            </>
           )}
 
           {searchOpen && sources && (
-            <SearchPanel
-              sources={sources}
-              onOpen={openFile}
-              onClose={() => setSearchOpen(false)}
-            />
+            <>
+              <SearchPanel
+                width={widths.side}
+                sources={sources}
+                onOpen={openFile}
+                onClose={() => setSearchOpen(false)}
+              />
+              {!narrow && (
+                <Divider
+                  side="left" label="Search panel width"
+                  width={rawWidths.side} min={LIMITS.side.min} max={LIMITS.side.max}
+                  onResize={(w) => setWidth('side', w)}
+                  onReset={() => resetWidth('side')}
+                />
+              )}
+            </>
           )}
 
           <main className="stage">
@@ -373,15 +398,26 @@ export default function App() {
               that works on every page, and the map must stay visible beside
               it — that side-by-side is the entire point. */}
           {codeOpen && openedFile && (
-            <CodePane
-              file={openedFile}
+            <>
+              {!narrow && (
+                <Divider
+                  side="right" label="Code pane width"
+                  width={rawWidths.code} min={LIMITS.code.min} max={LIMITS.code.max}
+                  onResize={(w) => setWidth('code', w)}
+                  onReset={() => resetWidth('code')}
+                />
+              )}
+              <CodePane
+                width={widths.code}
+                file={openedFile}
               sources={sources}
               related={relatedInFile}
               tabs={tabs}
-              onSelectTab={setOpenPath}
-              onCloseTab={closeTab}
-              onClose={() => { setCodeOpen(false); setOpenPath(null); setTabs([]); }}
-            />
+                onSelectTab={setOpenPath}
+                onCloseTab={closeTab}
+                onClose={() => { setCodeOpen(false); setOpenPath(null); setTabs([]); }}
+              />
+            </>
           )}
         </div>
       </GraphContext.Provider>

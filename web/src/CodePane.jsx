@@ -72,7 +72,7 @@ function escapeHtml(s) {
  *   a normal case rather than a degraded one.
  */
 export default function CodePane({
-  file, sources, onClose, related = [],
+  file, sources, onClose, related = [], width,
   tabs = [], onSelectTab, onCloseTab,
 }) {
   const [text, setText] = useState(null);
@@ -129,7 +129,7 @@ export default function CodePane({
   if (!file) return null;
 
   return (
-    <section className="code-pane">
+    <section className="code-pane" style={width ? { width } : undefined}>
       {/* Tabs only appear once more than one file is open — a single tab is
           noise above a header that already names the file. */}
       {tabs.length > 1 && (

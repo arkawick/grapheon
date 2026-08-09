@@ -49,7 +49,7 @@ function Row({ node, depth, openDirs, toggle, onPick, current, nodeByPath }) {
   );
 }
 
-export default function FileTree({ paths, nodeByPath, current, onPick, onClose }) {
+export default function FileTree({ paths, nodeByPath, current, onPick, onClose, width }) {
   const [filter, setFilter] = useState('');
   const [openDirs, setOpenDirs] = useState(() => new Set());
 
@@ -90,7 +90,7 @@ export default function FileTree({ paths, nodeByPath, current, onPick, onClose }
   });
 
   return (
-    <aside className="filetree">
+    <aside className="filetree" style={width ? { width } : undefined}>
       <header className="tree-head">
         <input
           value={filter}

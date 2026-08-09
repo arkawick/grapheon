@@ -170,7 +170,10 @@ that aren't get a hollow one. So the tree and the graph are visibly the same
 repository seen two ways, and selecting a node reveals it in the tree.
 
 Reading order is nav rail → tree → map → code, the same left-to-right layout
-every editor uses. **Tabs** appear once a second file is open (a lone tab is
+every editor uses. **Drag the dividers** to rebalance — the map reflows live
+(it's a canvas, so that isn't automatic), widths persist across reloads, and
+double-clicking a divider resets it. The map keeps a 200px floor whatever the
+dividers say. **Tabs** appear once a second file is open (a lone tab is
 noise above a header that already names the file), and closing one falls back
 to its left neighbour.
 

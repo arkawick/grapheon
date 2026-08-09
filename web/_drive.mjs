@@ -125,6 +125,25 @@ const tree = await page.evaluate(() => ({
   openedPath: document.querySelector('.code-title .mono')?.textContent,
   total: document.querySelector('.tree-foot')?.textContent?.trim(),
 }));
+// Dragging the code divider must resize the pane AND reflow the map live —
+// the map is a canvas, so nothing about that is automatic.
+const beforeDrag = await page.evaluate(() => ({
+  code: Math.round(document.querySelector('.code-pane').getBoundingClientRect().width),
+  canvas: Math.round(document.querySelector('canvas').getBoundingClientRect().width),
+}));
+const dividers = await page.$$('.divider');
+const dBox = await dividers[dividers.length - 1].boundingBox();
+await page.mouse.move(dBox.x + 2, dBox.y + dBox.height / 2);
+await page.mouse.down();
+await page.mouse.move(dBox.x - 140, dBox.y + dBox.height / 2, { steps: 10 });
+await page.mouse.up();
+await page.waitForTimeout(400);
+const afterDrag = await page.evaluate(() => ({
+  code: Math.round(document.querySelector('.code-pane').getBoundingClientRect().width),
+  canvas: Math.round(document.querySelector('canvas').getBoundingClientRect().width),
+}));
+const resize = { beforeDrag, afterDrag, count: dividers.length };
+
 await page.screenshot({ path: 'explorer.png' });
 await page.click('.code-head .close');
 await page.click('.explore-toggles button:nth-child(1)');
@@ -249,6 +268,7 @@ console.log(`self-map   : ${selfStats} (${repoFiles.length} files extracted in-b
 console.log(`code       : ${code.lines} lines, ${code.hljs} highlight spans, ${code.marked} gutter marks; map reflowed to ${code.canvasWidth}px`);
 console.log(`mobile     : folder-btn=${folderBtnCount} (want 0) zip-btn=${zipBtnCount} (want 1); blast sheet top=${sheet.top}px width=${sheet.width}px`);
 console.log(`explorer   : ${tree.total}, ${tree.mapped} mapped / ${tree.unmapped} unmapped dots; opened non-graph file ${tree.openedPath}`);
+console.log(`dividers   : ${resize.count} handles; drag -140px took code ${resize.beforeDrag.code}->${resize.afterDrag.code}px and map ${resize.beforeDrag.canvas}->${resize.afterDrag.canvas}px`);
 console.log(`search     : ${searchFoot} in ${searchMs}ms (cold); hit jumped to ${jumped.path} line ${jumped.target}`);
 console.log(`tabs       : [${tabsInfo.open.join(', ')}] active=${tabsInfo.active}`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);
