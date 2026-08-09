@@ -703,3 +703,35 @@ body.resizing * { cursor: col-resize !important; }
     font-size: 22px; line-height: 1; cursor: pointer;
   }
 }
+
+/* --- knowledge base --------------------------------------------------------- */
+.kb-query {
+  width: 100%; margin: 10px 0 12px; padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  outline: none; font: inherit; font-size: 13px;
+}
+.kb-query:focus { border-color: var(--accent); }
+
+.kb-hit {
+  padding: 8px 9px; margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border); border-radius: 8px;
+  cursor: pointer;
+}
+.kb-hit:hover { background: rgba(255, 255, 255, 0.06); border-color: rgba(125, 211, 252, 0.35); }
+.kb-hit header { display: flex; align-items: baseline; gap: 8px; }
+.kb-rank {
+  flex-shrink: 0; min-width: 16px; font-size: 10px; color: var(--dim);
+}
+.kb-heading { font-weight: 600; font-size: 12.5px; }
+.kb-source { font-size: 10.5px; margin: 2px 0 5px 24px; }
+.kb-text {
+  margin: 0 0 0 24px; font-size: 11.5px; line-height: 1.5; color: #b9b9c9;
+  white-space: pre-wrap; word-break: break-word;
+}
+.kb-text mark { background: rgba(253, 224, 71, 0.22); color: #fde047; }
+.knowledge code {
+  font-family: ui-monospace, monospace; font-size: 11px;
+  background: rgba(255, 255, 255, 0.07); padding: 1px 4px; border-radius: 4px;
+}

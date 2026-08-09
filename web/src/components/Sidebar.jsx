@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useGraph } from '../GraphContext.js';
 import {
   filesFromFileList, repoNameFromFileList,
-  filesFromZip, repoNameFromZip,
+  filesFromZip, repoNameFromZip, documentsFromFileList,
 } from '../lib/corpus.js';
 
 // Android WebViews (and mobile browsers generally) have no directory picker —
@@ -14,16 +14,18 @@ const HAS_DIR_PICKER = !('ontouchstart' in window) || navigator.maxTouchPoints =
 const NAV = [
   { to: '/', label: 'Atlas', hint: 'the map' },
   { to: '/blast', label: 'Blast Radius', hint: 'what breaks if this changes' },
+  { to: '/knowledge', label: 'Knowledge', hint: 'ask your documents' },
 ];
 
 export default function Sidebar() {
   const {
     layout, corpusName, extractRepo, busy, sources,
     treeOpen, setTreeOpen, searchOpen, setSearchOpen,
-    menuOpen, setMenuOpen, narrow,
+    menuOpen, setMenuOpen, narrow, ingestDocuments,
   } = useGraph();
   const pickerRef = useRef(null);
   const zipRef = useRef(null);
+  const docsRef = useRef(null);
   const { pathname } = useLocation();
 
   const close = () => setMenuOpen(false);
@@ -44,6 +46,17 @@ export default function Sidebar() {
     e.target.value = '';
     close();
     extractRepo(await filesFromZip(file), repoNameFromZip(file));
+  };
+
+  const onDocs = async (e) => {
+    const fileList = e.target.files;
+    if (!fileList?.length) return;
+    const first = fileList[0].webkitRelativePath || fileList[0].name;
+    const name = first.includes('/') ? first.split('/')[0] : 'documents';
+    const docs = await documentsFromFileList(fileList);
+    e.target.value = '';
+    close();
+    ingestDocuments(docs, name);
   };
 
   // On a phone the bar collapses to a menu button; everything below lives in
@@ -113,6 +126,9 @@ export default function Sidebar() {
           <button className="alt" disabled={!!busy} onClick={() => zipRef.current?.click()}>
             {busy && !HAS_DIR_PICKER ? 'Extracting…' : 'Open a repo .zip…'}
           </button>
+          <button className="alt" disabled={!!busy} onClick={() => docsRef.current?.click()}>
+            Open documents…
+          </button>
           <div className="nav-hint">
             Parsed on this device. Nothing is uploaded anywhere.
             {!HAS_DIR_PICKER && ' Tip: GitHub → Code → Download ZIP.'}
@@ -137,6 +153,17 @@ export default function Sidebar() {
             accept=".zip,application/zip"
             style={{ display: 'none' }}
             onChange={onZip}
+          />
+          {/* Multiple files rather than a directory: a knowledge base is
+              usually a handful of specs you choose, not a whole tree — and
+              this is the one picker that works on a phone. */}
+          <input
+            ref={docsRef}
+            type="file"
+            multiple
+            accept=".md,.markdown,.txt,.rst,.text"
+            style={{ display: 'none' }}
+            onChange={onDocs}
           />
         </div>
 

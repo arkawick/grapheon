@@ -5,6 +5,7 @@ import { GraphContext } from './GraphContext.js';
 import Sidebar from './components/Sidebar.jsx';
 import AtlasPage from './pages/AtlasPage.jsx';
 import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
+import KnowledgePage from './pages/KnowledgePage.jsx';
 import CodePane from './CodePane.jsx';
 import FileTree from './FileTree.jsx';
 import SearchPanel from './SearchPanel.jsx';
@@ -69,6 +70,10 @@ export default function App() {
   // items, so they overlapped and "Open a repo .zip…" sat entirely off-screen
   // — there was literally no way to load a repo on a phone.
   const [menuOpen, setMenuOpen] = useState(false);
+  // The knowledge base, when one is loaded: BM25 index + passage/doc metadata.
+  // Its GRAPH goes through `corpus` like any other, so the Atlas, file tree and
+  // code pane render it with no changes — a corpus is a corpus.
+  const [knowledge, setKnowledge] = useState(null);
   // Files opened from the TREE or SEARCH rather than from a graph node. Kept
   // separate from `selected` because most readable files (README, compose.yml)
   // have no node at all, and forcing them through the selection would mean
@@ -189,6 +194,49 @@ export default function App() {
     w.postMessage({ files, name });
   }, []);
 
+  /** Build a knowledge base from dropped .md/.txt/.rst files. */
+  const ingestDocuments = useCallback((files, name) => {
+    if (!files.length) {
+      setError('No readable documents found (looked for .md, .txt, .rst).');
+      return;
+    }
+    workerRef.current?.terminate();
+    setError(null);
+    setBusy({ stage: 'starting', detail: `${files.length} documents` });
+    const w = new Worker(new URL('./worker/knowledge-worker.js', import.meta.url), { type: 'module' });
+    workerRef.current = w;
+    w.onerror = (ev) => {
+      setBusy(null);
+      setError(`Knowledge worker failed: ${ev.message ?? 'failed to load'}`);
+      w.terminate();
+      workerRef.current = null;
+    };
+    w.onmessage = (e) => {
+      const msg = e.data;
+      if (msg.type === 'progress') setBusy({ stage: msg.stage, detail: msg.detail });
+      else if (msg.type === 'result') {
+        setBusy(null);
+        setCorpus({ name, layout: msg.layout, edges: msg.edges });
+        setKnowledge({
+          index: msg.index,
+          documents: msg.documents,
+          stats: { documents: msg.documents.length, passages: msg.index.size },
+        });
+        // The documents ARE the sources, so the file tree and code pane show
+        // them with no extra work.
+        setSources(inMemorySources(files.map((f) => ({ path: f.path, src: f.text }))));
+        w.terminate();
+        workerRef.current = null;
+      } else if (msg.type === 'error') {
+        setBusy(null);
+        setError(`Knowledge build failed: ${msg.message}`);
+        w.terminate();
+        workerRef.current = null;
+      }
+    };
+    w.postMessage({ files, name });
+  }, []);
+
   useEffect(() => () => workerRef.current?.terminate(), []);
 
   // Android back dismisses the top layer — code, then tree, then selection —
@@ -207,8 +255,12 @@ export default function App() {
   // as the folder picker, minus the picker.
   useEffect(() => {
     window.__loadRepoFiles = (files, name = 'repo') => extractRepo(files, name);
-    return () => { delete window.__loadRepoFiles; };
-  }, [extractRepo]);
+    window.__ingestDocuments = (docs, name = 'documents') => ingestDocuments(docs, name);
+    return () => {
+      delete window.__loadRepoFiles;
+      delete window.__ingestDocuments;
+    };
+  }, [extractRepo, ingestDocuments]);
 
   const nodeById = useMemo(() => {
     if (!corpus) return new Map();
@@ -312,9 +364,10 @@ export default function App() {
     extractRepo, busy,
     sources, codeOpen, setCodeOpen, treeOpen, setTreeOpen, openFile,
     searchOpen, setSearchOpen, menuOpen, setMenuOpen, narrow,
+    knowledge, ingestDocuments,
   }), [corpus, adjacency, ensureAdjacency, nodeById, nodeByPath, selected, focus, highlight,
        setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile,
-       searchOpen, menuOpen, narrow]);
+       searchOpen, menuOpen, narrow, knowledge, ingestDocuments]);
 
   const layout = corpus?.layout;
 
@@ -396,6 +449,7 @@ export default function App() {
               <Routes>
                 <Route path="/" element={<AtlasPage />} />
                 <Route path="/blast" element={<BlastRadiusPage />} />
+                <Route path="/knowledge" element={<KnowledgePage />} />
               </Routes>
             )}
           </main>

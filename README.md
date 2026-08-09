@@ -157,6 +157,29 @@ Debug builds on the host still work if you have a JDK + SDK:
 The app is the static site verbatim — extraction runs in the WebView's
 worker, on-device, offline.
 
+## Knowledge base
+
+A second, separate use case: point it at documents instead of code.
+**Open documents…** takes `.md` / `.txt` / `.rst`, and **Knowledge** in the
+sidebar lets you query them.
+
+- Documents are split **document → section → passage**. Sections become graph
+  nodes; passages are what search ranks. One node per paragraph would make an
+  unreadable map, and a retriever that only returns whole documents is useless.
+- Retrieval is **BM25** — real ranking with term saturation and length
+  normalisation, no model, no download, no key. Matching terms are highlighted
+  and each hit opens its source document at that passage's own line.
+- **The same Atlas renders it.** The document graph goes through the identical
+  pipeline (Louvain → ForceAtlas2), so your documents become a map clustered
+  by shared vocabulary — 18 of Aeon's markdown files give 284 nodes in 7
+  topic clusters. Section-to-section similarity edges are tagged `INFERRED`,
+  because word overlap is a guess where a heading hierarchy is a fact.
+
+What it deliberately does **not** do is write prose answers — that needs an
+LLM. You get ranked evidence with its source, which for a base you're trying
+to trust is the more useful half. PDF support and optional on-device
+embeddings are the natural next steps.
+
 ## File explorer
 
 **Files** in the sidebar opens the repo as a directory tree beside the map.

@@ -122,3 +122,32 @@ export async function filesFromZip(file) {
 export function repoNameFromZip(file) {
   return file.name.replace(/\.zip$/i, '') || 'repo';
 }
+
+// --- knowledge base ---------------------------------------------------------
+
+const DOC_EXTS = new Set(['.md', '.markdown', '.txt', '.rst', '.text']);
+
+/**
+ * Documents for the knowledge base, from a multi-file picker.
+ *
+ * Separate from the repo path on purpose: this is a different corpus answering
+ * different questions, and mixing a README into a code graph is not the same
+ * thing as building a knowledge base out of a folder of specifications.
+ */
+export async function documentsFromFileList(fileList) {
+  const out = [];
+  for (const f of fileList) {
+    const rel = f.webkitRelativePath || f.name;
+    const dot = rel.lastIndexOf('.');
+    if (dot === -1 || !DOC_EXTS.has(rel.slice(dot).toLowerCase())) continue;
+    if (skipped(rel) || f.size > MAX_FILE_BYTES) continue;
+    // Strip a common root folder the way the repo picker does, so paths read
+    // as "spec/intro.md" rather than "myfolder/spec/intro.md".
+    out.push({ path: rel, text: await f.text() });
+  }
+  const roots = new Set(out.map((f) => f.path.split('/')[0]));
+  if (roots.size === 1 && out.every((f) => f.path.includes('/'))) {
+    for (const f of out) f.path = f.path.split('/').slice(1).join('/');
+  }
+  return out;
+}

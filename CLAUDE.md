@@ -310,6 +310,32 @@ highlight.js, python + javascript only.
   code pane, then the selection, before exiting. Registered as a stack so
   future overlays can join it. Dynamic-imported, so the web build is unaffected.
 
+## Knowledge base (lib/knowledge/)
+
+Second corpus type: documents, retrieved rather than traversed. `parse.js`
+(doc → section → passage), `bm25.js` (index + search), `graph.js` (canonical
+graph), `worker/knowledge-worker.js`, `pages/KnowledgePage.jsx`.
+- **It emits the SAME canonical shape as the code adapter**, so Louvain, FA2,
+  the Atlas, the file tree and the code pane all work unchanged. Keep that
+  true — it is the reason this was a day's work and not a rewrite.
+- **Node ids must be unique and are derived from text**, which repeats. Two
+  fixes, both load-bearing: repeated headings inside a document get `-2`
+  suffixes, and duplicate file basenames get `(2)` in the worker. A multi-file
+  picker gives every file its bare name, so three `README.md`s collide and
+  graphology refuses to build the graph at all.
+- **Passages must carry their OWN start line.** They originally inherited the
+  section's, so every result from one section looked identical and opened at
+  the heading instead of the text. `parse.js` keeps line numbers per line for
+  exactly this; a test pins it.
+- **Filter passages with no prose** (<15 alphanumerics). A markdown `---` rule
+  is a real block and BM25 will rank it, producing a result whose entire
+  content is "---". Cost 70 of 439 passages on Aeon's docs, all noise.
+- BM25 not TF-IDF: term saturation and length normalisation are what make
+  uneven prose rank sensibly. The index has a `vector` field per passage,
+  unused — that is where MiniLM embeddings go without a rewrite.
+- `related` edges are **INFERRED** (word overlap is a guess); `contains` and
+  `subsection` are EXTRACTED (the document says so).
+
 ## File explorer
 
 `web/src/FileTree.jsx` + `lib/filetree.js`. The repo as a directory, beside the

@@ -201,6 +201,43 @@ await page.waitForTimeout(800); // let the fresh map settle
 const selfStats = (await page.textContent('.sidebar-foot')).replace(/\s+/g, ' ').trim();
 await page.screenshot({ path: 'browser-extract.png' });
 
+// --- knowledge base ----------------------------------------------------------
+// A second corpus type entirely: documents rather than code, retrieved by
+// BM25 rather than traversed. It reuses the same graph pipeline, so this also
+// proves the Atlas renders something that is not a codebase.
+const mdFiles = repoFiles.length ? [] : [];
+{
+  const { readdirSync } = await import('node:fs');
+  for (const dir of [REPO, join(REPO, 'docs')]) {
+    for (const n of readdirSync(dir)) {
+      if (/\.md$/i.test(n)) mdFiles.push({ path: n, text: readFileSync(join(dir, n), 'utf8') });
+    }
+  }
+}
+await page.evaluate(({ docs }) => window.__ingestDocuments(docs, 'grapheon-docs'), { docs: mdFiles });
+await page.waitForFunction(
+  () => document.querySelector('.corpus')?.textContent === 'grapheon-docs',
+  { timeout: 90000 }
+);
+await page.click('.nav a[href="#/knowledge"]');
+await page.waitForSelector('.kb-query', { timeout: 10000 });
+await page.fill('.kb-query', 'how does blast radius certainty work');
+await page.waitForTimeout(500);
+const kb = await page.evaluate(() => ({
+  stats: document.querySelector('.knowledge .question')?.textContent.replace(/\s+/g, ' ').trim(),
+  hits: document.querySelectorAll('.kb-hit').length,
+  top: document.querySelector('.kb-heading')?.textContent,
+  marks: document.querySelectorAll('.kb-text mark').length,
+  nodes: document.querySelector('.sidebar-foot')?.textContent.replace(/\s+/g, ' ').trim(),
+}));
+// A hit opens its source document at the passage's own line.
+await page.click('.kb-hit');
+await page.waitForSelector('.code-pane .code-line', { timeout: 10000 });
+await page.waitForTimeout(400);
+kb.opened = await page.evaluate(() => document.querySelector('.code-title .mono')?.textContent);
+await page.screenshot({ path: 'knowledge.png' });
+await page.click('.code-head .close');
+
 // --- mobile pass: phone viewport, touch --------------------------------------
 // hasTouch flips HAS_DIR_PICKER, so this also exercises the zip-only sidebar
 // branch the Android shell ships with.
@@ -308,6 +345,7 @@ console.log(`explorer   : ${tree.total}, ${tree.mapped} mapped / ${tree.unmapped
 console.log(`dividers   : ${resize.count} handles; drag -140px took code ${resize.beforeDrag.code}->${resize.afterDrag.code}px and map ${resize.beforeDrag.canvas}->${resize.afterDrag.canvas}px`);
 console.log(`search     : ${searchFoot} in ${searchMs}ms (cold); hit jumped to ${jumped.path} line ${jumped.target}`);
 console.log(`tabs       : [${tabsInfo.open.join(', ')}] active=${tabsInfo.active}`);
+console.log(`knowledge  : ${kb.stats}; ${kb.nodes}; ${kb.hits} hits, ${kb.marks} highlights, top="${kb.top}" -> ${kb.opened}`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);
 console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, mobile-{atlas,detail,blast,code}.png`);
 if (errors.length) {
