@@ -208,7 +208,13 @@ mirrored tree (`/data/<name>/src/…`). Not one blob: the full Aeon corpus is
 18 MB of text, and opening one function shouldn't download that. For a corpus
 extracted in the browser it's free — the worker still holds every file.
 
-On a phone the pane goes full-screen over the map, and **word wrap is on by
+**On a phone**, the header collapses to a tappable **Grapheon** logo that opens
+a drawer holding everything: navigation, Files, Search, and the repo/zip
+upload. Flat, they needed 504px of row inside a 390px screen — items
+overlapped and the upload button sat entirely off-screen, so there was no way
+to load a repo at all.
+
+The code pane goes full-screen over the map, and **word wrap is on by
 default** — a 390px screen shows ~45 columns, and without it `llm.py` needs
 706px of horizontal scrolling to read one line. Toggle it off from the header.
 Android's **back button closes the code pane** (then clears the selection)

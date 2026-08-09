@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useGraph } from '../GraphContext.js';
 import {
   filesFromFileList, repoNameFromFileList,
@@ -20,105 +20,134 @@ export default function Sidebar() {
   const {
     layout, corpusName, extractRepo, busy, sources,
     treeOpen, setTreeOpen, searchOpen, setSearchOpen,
+    menuOpen, setMenuOpen, narrow,
   } = useGraph();
   const pickerRef = useRef(null);
   const zipRef = useRef(null);
+  const { pathname } = useLocation();
+
+  const close = () => setMenuOpen(false);
 
   const onPick = async (e) => {
     const fileList = e.target.files;
     if (!fileList?.length) return;
     const name = repoNameFromFileList(fileList);
-    const files = await filesFromFileList(fileList);
+    const picked = await filesFromFileList(fileList);
     e.target.value = ''; // allow re-picking the same folder
-    extractRepo(files, name);
+    close();
+    extractRepo(picked, name);
   };
 
   const onZip = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
+    close();
     extractRepo(await filesFromZip(file), repoNameFromZip(file));
   };
 
+  // On a phone the bar collapses to a menu button; everything below lives in
+  // the drawer. Cramming nav + Files + Search + two upload buttons into one
+  // 390px row put the upload entirely off-screen.
+  const current = NAV.find((n) => n.to === pathname) ?? NAV[0];
+
   return (
-    <nav className="sidebar">
-      <div className="brand">
-        Grapheon
-        {corpusName && <span className="corpus">{corpusName}</span>}
-      </div>
-
-      <ul className="nav">
-        {NAV.map((n) => (
-          <li key={n.to}>
-            <NavLink to={n.to} end={n.to === '/'}>
-              <span className="nav-label">{n.label}</span>
-              <span className="nav-hint">{n.hint}</span>
-            </NavLink>
-          </li>
-        ))}
-      </ul>
-
-      {sources && (
-        <div className="explore-toggles">
-          <button
-            className={`files-toggle${treeOpen ? ' on' : ''}`}
-            onClick={() => setTreeOpen((o) => !o)}
-          >
-            Files <span className="dim">{sources.count}</span>
+    <>
+      {narrow && (
+        <header className="topbar-compact">
+          <button className="menu-btn" onClick={() => setMenuOpen(true)} aria-label="Open menu">
+            <span className="menu-icon" aria-hidden="true"><i /><i /><i /></span>
+            <span className="brand-name">Grapheon</span>
           </button>
-          <button
-            className={`files-toggle${searchOpen ? ' on' : ''}`}
-            onClick={() => setSearchOpen((o) => !o)}
-            title="Search across file contents"
-          >
-            Search
-          </button>
-        </div>
+          <span className="current-page">{current.label}</span>
+          {corpusName && <span className="corpus">{corpusName}</span>}
+        </header>
       )}
 
-      <div className="open-repo">
-        {HAS_DIR_PICKER && (
-          <button disabled={!!busy} onClick={() => pickerRef.current?.click()}>
-            {busy ? 'Extracting…' : 'Open a repo…'}
-          </button>
+      {narrow && menuOpen && <div className="scrim" onClick={close} />}
+
+      <nav className={`sidebar${narrow ? ' drawer' : ''}${menuOpen ? ' open' : ''}`}>
+        <div className="brand">
+          Grapheon
+          {corpusName && <span className="corpus">{corpusName}</span>}
+          {narrow && (
+            <button className="close drawer-close" onClick={close} aria-label="Close menu">×</button>
+          )}
+        </div>
+
+        <ul className="nav">
+          {NAV.map((n) => (
+            <li key={n.to}>
+              <NavLink to={n.to} end={n.to === '/'} onClick={close}>
+                <span className="nav-label">{n.label}</span>
+                <span className="nav-hint">{n.hint}</span>
+              </NavLink>
+            </li>
+          ))}
+        </ul>
+
+        {sources && (
+          <div className="explore-toggles">
+            <button
+              className={`files-toggle${treeOpen ? ' on' : ''}`}
+              onClick={() => { setTreeOpen((o) => !o); close(); }}
+            >
+              Files <span className="dim">{sources.count}</span>
+            </button>
+            <button
+              className={`files-toggle${searchOpen ? ' on' : ''}`}
+              onClick={() => { setSearchOpen((o) => !o); close(); }}
+              title="Search across file contents"
+            >
+              Search
+            </button>
+          </div>
         )}
-        <button className="alt" disabled={!!busy} onClick={() => zipRef.current?.click()}>
-          {busy && !HAS_DIR_PICKER ? 'Extracting…' : 'Open a repo .zip…'}
-        </button>
-        <div className="nav-hint">
-          Parsed on this device. Nothing is uploaded anywhere.
-          {!HAS_DIR_PICKER && ' Tip: GitHub → Code → Download ZIP.'}
-        </div>
-        {/*
-          webkitdirectory is non-standard but universal on desktop; it is the
-          only folder picker that works without a backend. File System Access
-          API would be nicer but is Chromium-only. Neither exists on mobile,
-          hence the zip input.
-        */}
-        <input
-          ref={pickerRef}
-          type="file"
-          webkitdirectory=""
-          multiple
-          style={{ display: 'none' }}
-          onChange={onPick}
-        />
-        <input
-          ref={zipRef}
-          type="file"
-          accept=".zip,application/zip"
-          style={{ display: 'none' }}
-          onChange={onZip}
-        />
-      </div>
 
-      {layout && (
-        <div className="sidebar-foot">
-          <div>{layout.nodes.length.toLocaleString()} nodes</div>
-          <div>{layout.communities.length} subsystems</div>
-          <div className="dim">via {layout.meta.source}</div>
+        <div className="open-repo">
+          {HAS_DIR_PICKER && (
+            <button disabled={!!busy} onClick={() => pickerRef.current?.click()}>
+              {busy ? 'Extracting…' : 'Open a repo…'}
+            </button>
+          )}
+          <button className="alt" disabled={!!busy} onClick={() => zipRef.current?.click()}>
+            {busy && !HAS_DIR_PICKER ? 'Extracting…' : 'Open a repo .zip…'}
+          </button>
+          <div className="nav-hint">
+            Parsed on this device. Nothing is uploaded anywhere.
+            {!HAS_DIR_PICKER && ' Tip: GitHub → Code → Download ZIP.'}
+          </div>
+          {/*
+            webkitdirectory is non-standard but universal on desktop; it is the
+            only folder picker that works without a backend. File System Access
+            API would be nicer but is Chromium-only. Neither exists on mobile,
+            hence the zip input.
+          */}
+          <input
+            ref={pickerRef}
+            type="file"
+            webkitdirectory=""
+            multiple
+            style={{ display: 'none' }}
+            onChange={onPick}
+          />
+          <input
+            ref={zipRef}
+            type="file"
+            accept=".zip,application/zip"
+            style={{ display: 'none' }}
+            onChange={onZip}
+          />
         </div>
-      )}
-    </nav>
+
+        {layout && (
+          <div className="sidebar-foot">
+            <div>{layout.nodes.length.toLocaleString()} nodes</div>
+            <div>{layout.communities.length} subsystems</div>
+            <div className="dim">via {layout.meta.source}</div>
+          </div>
+        )}
+      </nav>
+    </>
   );
 }

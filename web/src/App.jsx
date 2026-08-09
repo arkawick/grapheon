@@ -65,6 +65,10 @@ export default function App() {
   const [codeOpen, setCodeOpen] = useState(false);
   const [treeOpen, setTreeOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // Phone-only nav drawer. At 390px the top bar needed 504px to lay out its
+  // items, so they overlapped and "Open a repo .zip…" sat entirely off-screen
+  // — there was literally no way to load a repo on a phone.
+  const [menuOpen, setMenuOpen] = useState(false);
   // Files opened from the TREE or SEARCH rather than from a graph node. Kept
   // separate from `selected` because most readable files (README, compose.yml)
   // have no node at all, and forcing them through the selection would mean
@@ -190,12 +194,13 @@ export default function App() {
   // Android back dismisses the top layer — code, then tree, then selection —
   // before it is allowed to leave the app.
   useEffect(() => onBackButton(() => {
+    if (menuOpen) { setMenuOpen(false); return true; }
     if (codeOpen) { setCodeOpen(false); setOpenPath(null); setTabs([]); return true; }
     if (searchOpen) { setSearchOpen(false); return true; }
     if (treeOpen) { setTreeOpen(false); return true; }
     if (selected) { setSelected(null); return true; }
     return false;
-  }), [codeOpen, searchOpen, treeOpen, selected]);
+  }), [menuOpen, codeOpen, searchOpen, treeOpen, selected]);
 
   // Deterministic entry point for automation (and a handy console API):
   // window.__loadRepoFiles([{path, src}], 'name') drives the exact same path
@@ -306,9 +311,10 @@ export default function App() {
     selected, setSelected, focus, highlight, setKindFilter,
     extractRepo, busy,
     sources, codeOpen, setCodeOpen, treeOpen, setTreeOpen, openFile,
-    searchOpen, setSearchOpen,
+    searchOpen, setSearchOpen, menuOpen, setMenuOpen, narrow,
   }), [corpus, adjacency, ensureAdjacency, nodeById, nodeByPath, selected, focus, highlight,
-       setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile, searchOpen]);
+       setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile,
+       searchOpen, menuOpen, narrow]);
 
   const layout = corpus?.layout;
 

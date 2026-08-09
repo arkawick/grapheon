@@ -212,6 +212,13 @@ out unsigned instead of failing). Host debug path still works:
 - **Mobile has NO `webkitdirectory`** — the folder picker silently degrades to
   a file picker on Android. The zip path (`filesFromZip`, fflate) is the only
   working mobile ingestion; the sidebar hides the folder button on touch.
+- **The phone header is a DRAWER, not a row** (`Sidebar.jsx`, `narrow` from
+  `usePanelWidths`). Laid out flat it needed 504px inside 390px: nav, Files,
+  Search and two upload buttons overlapped, and "Open a repo .zip…" was pushed
+  fully off-screen — the phone build could not load a repo at all, and nothing
+  reported an error because the element existed. The drive now asserts the bar
+  does not overflow AND that the zip button is **on screen**, not merely in the
+  DOM; "present in the DOM" is exactly what hid this.
 - **`cap sync` copies the BUILT dist into `android/app/src/main/assets/public`**
   — megabytes of minified one-line JS *inside the repo tree*. Any corpus walk
   that doesn't skip `android/` feeds bundles back into the parser and stalls

@@ -213,12 +213,46 @@ const mpage = await mob.newPage();
 mpage.on('console', (m) => { if (m.type() === 'error') errors.push('[mobile] ' + m.text()); });
 mpage.on('pageerror', (e) => errors.push('[mobile] ' + String(e)));
 await mpage.goto(URL, { waitUntil: 'networkidle' });
-await mpage.waitForSelector('.corpus', { timeout: 20000 }); // foot is hidden on mobile
+await mpage.waitForSelector('.topbar-compact', { timeout: 20000 });
 await mpage.waitForTimeout(600);
 
-const folderBtnCount = await mpage.$$eval('.open-repo button:not(.alt)', (b) => b.length);
-const zipBtnCount = await mpage.$$eval('.open-repo button.alt', (b) => b.length);
+// The compact bar must not overflow. It once needed 504px inside 390px, which
+// pushed "Open a repo .zip…" entirely off-screen — a phone had no way to load
+// a repo at all.
+const bar = await mpage.evaluate(() => {
+  const el = document.querySelector('.topbar-compact');
+  return { width: Math.round(el.getBoundingClientRect().width), content: el.scrollWidth };
+});
 await mpage.screenshot({ path: 'mobile-atlas.png' });
+
+// Everything else lives behind the logo. Assert the upload button is actually
+// ON SCREEN, not merely present in the DOM — that distinction was the bug.
+await mpage.tap('.menu-btn');
+await mpage.waitForTimeout(350);
+const drawer = await mpage.evaluate(() => {
+  const onScreen = (sel) => {
+    const el = document.querySelector(sel);
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.left >= 0 && r.right <= window.innerWidth;
+  };
+  return {
+    zipVisible: onScreen('.open-repo button.alt'),
+    folderVisible: onScreen('.open-repo button:not(.alt)'), // absent on touch
+    navCount: document.querySelectorAll('.sidebar.drawer .nav a').length,
+  };
+});
+await mpage.screenshot({ path: 'mobile-drawer.png' });
+
+// Navigating from the drawer closes it.
+await mpage.tap('.sidebar.drawer .nav a[href="#/blast"]');
+await mpage.waitForSelector('.blast', { timeout: 10000 });
+await mpage.waitForTimeout(300);
+const drawerClosed = await mpage.evaluate(() => !document.querySelector('.sidebar.drawer.open'));
+await mpage.tap('.menu-btn');
+await mpage.waitForTimeout(250);
+await mpage.tap('.sidebar.drawer .nav a[href="#/"]');
+await mpage.waitForTimeout(400);
 
 // Legend opens from its toggle, picking a subsystem closes it and selects.
 await mpage.tap('.legend-toggle');
@@ -246,8 +280,10 @@ await mpage.screenshot({ path: 'mobile-code.png' });
 await mpage.tap('.code-head .close');
 await mpage.waitForTimeout(300);
 
-// Blast page renders as a bottom sheet.
-await mpage.tap('.nav a[href="#/blast"]');
+// Blast page renders as a bottom sheet. Nav lives in the drawer now.
+await mpage.tap('.menu-btn');
+await mpage.waitForTimeout(250);
+await mpage.tap('.sidebar.drawer .nav a[href="#/blast"]');
 await mpage.waitForSelector('.blast', { timeout: 10000 });
 const sheet = await mpage.$eval('.blast', (el) => {
   const r = el.getBoundingClientRect();
@@ -266,7 +302,8 @@ console.log(`blast      : ${tally}`);
 console.log(`rings      : ${rings.join(' | ')}`);
 console.log(`self-map   : ${selfStats} (${repoFiles.length} files extracted in-browser)`);
 console.log(`code       : ${code.lines} lines, ${code.hljs} highlight spans, ${code.marked} gutter marks; map reflowed to ${code.canvasWidth}px`);
-console.log(`mobile     : folder-btn=${folderBtnCount} (want 0) zip-btn=${zipBtnCount} (want 1); blast sheet top=${sheet.top}px width=${sheet.width}px`);
+console.log(`mobile     : bar ${bar.content}px content in ${bar.width}px (want equal); blast sheet top=${sheet.top}px width=${sheet.width}px`);
+console.log(`mobile menu: zip button on-screen=${drawer.zipVisible} (want true), folder=${drawer.folderVisible} (want false on touch), ${drawer.navCount} nav links, closes on navigate=${drawerClosed}`);
 console.log(`explorer   : ${tree.total}, ${tree.mapped} mapped / ${tree.unmapped} unmapped dots; opened non-graph file ${tree.openedPath}`);
 console.log(`dividers   : ${resize.count} handles; drag -140px took code ${resize.beforeDrag.code}->${resize.afterDrag.code}px and map ${resize.beforeDrag.canvas}->${resize.afterDrag.canvas}px`);
 console.log(`search     : ${searchFoot} in ${searchMs}ms (cold); hit jumped to ${jumped.path} line ${jumped.target}`);
