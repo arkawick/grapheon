@@ -37,6 +37,7 @@ const SKIP_DIRS = new Set([
   '.claude', '.idea', '.vscode', '.pytest_cache', '.mypy_cache', '.tox', '.cache',
 ]);
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // a 2 MB source file is not source
+const PDF_MAX_BYTES = 40 * 1024 * 1024; // PDFs are binary; papers get large
 
 const ext = (name) => {
   const i = name.lastIndexOf('.');
@@ -125,7 +126,7 @@ export function repoNameFromZip(file) {
 
 // --- knowledge base ---------------------------------------------------------
 
-const DOC_EXTS = new Set(['.md', '.markdown', '.txt', '.rst', '.text']);
+const DOC_EXTS = new Set(['.md', '.markdown', '.txt', '.rst', '.text', '.pdf']);
 
 /**
  * Documents for the knowledge base, from a multi-file picker.
@@ -139,11 +140,17 @@ export async function documentsFromFileList(fileList) {
   for (const f of fileList) {
     const rel = f.webkitRelativePath || f.name;
     const dot = rel.lastIndexOf('.');
-    if (dot === -1 || !DOC_EXTS.has(rel.slice(dot).toLowerCase())) continue;
-    if (skipped(rel) || f.size > MAX_FILE_BYTES) continue;
+    const ext = dot === -1 ? '' : rel.slice(dot).toLowerCase();
+    if (!DOC_EXTS.has(ext)) continue;
+    if (skipped(rel)) continue;
+    // PDFs are binary and get a bigger ceiling — a 3 MB PDF is an ordinary
+    // paper, whereas a 3 MB "text file" is a data dump.
+    if (f.size > (ext === '.pdf' ? PDF_MAX_BYTES : MAX_FILE_BYTES)) continue;
     // Strip a common root folder the way the repo picker does, so paths read
     // as "spec/intro.md" rather than "myfolder/spec/intro.md".
-    out.push({ path: rel, text: await f.text() });
+    out.push(ext === '.pdf'
+      ? { path: rel, data: await f.arrayBuffer() }
+      : { path: rel, text: await f.text() });
   }
   const roots = new Set(out.map((f) => f.path.split('/')[0]));
   if (roots.size === 1 && out.every((f) => f.path.includes('/'))) {

@@ -24,7 +24,8 @@ export default function KnowledgePage() {
         <h1>Knowledge</h1>
         <p className="dim">
           Load documents from the menu — <strong>Open documents…</strong> takes
-          <code> .md</code>, <code>.txt</code> and <code>.rst</code> files.
+          <code> .md</code>, <code>.txt</code>, <code>.rst</code> and
+          <code> .pdf</code> files.
         </p>
       </aside>
     );
@@ -44,6 +45,15 @@ export default function KnowledgePage() {
       <p className="dim question">
         {knowledge.stats.documents} documents · {knowledge.stats.passages} passages
       </p>
+
+      {/* A scanned PDF has no text layer and is skipped; saying so beats a
+          knowledge base that quietly contains less than the user handed it. */}
+      {knowledge.warnings?.length > 0 && (
+        <p className="caveat">
+          {knowledge.warnings.length} file{knowledge.warnings.length > 1 ? 's' : ''} skipped:{' '}
+          {knowledge.warnings[0]}
+        </p>
+      )}
 
       <input
         className="kb-query"

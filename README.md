@@ -160,8 +160,17 @@ worker, on-device, offline.
 ## Knowledge base
 
 A second, separate use case: point it at documents instead of code.
-**Open documents…** takes `.md` / `.txt` / `.rst`, and **Knowledge** in the
-sidebar lets you query them.
+**Open documents…** takes `.md` / `.txt` / `.rst` / **`.pdf`**, and
+**Knowledge** in the sidebar lets you query them.
+
+**PDFs** are converted to markdown-ish text by pdf.js before anything else
+sees them — headings are detected by font size relative to the document's
+median, so the rest of the pipeline treats a PDF exactly like a `.md` file.
+pdf.js is loaded only when a PDF is actually present.
+
+One real limit: a **scanned PDF has no text layer** — it's images of text —
+and is skipped with a message saying so rather than silently contributing
+nothing. Extracting it would need OCR, which is a different project.
 
 - Documents are split **document → section → passage**. Sections become graph
   nodes; passages are what search ranks. One node per paragraph would make an

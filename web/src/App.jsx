@@ -194,15 +194,45 @@ export default function App() {
     w.postMessage({ files, name });
   }, []);
 
-  /** Build a knowledge base from dropped .md/.txt/.rst files. */
-  const ingestDocuments = useCallback((files, name) => {
+  /** Build a knowledge base from dropped .md/.txt/.rst/.pdf files. */
+  const ingestDocuments = useCallback(async (files, name) => {
     if (!files.length) {
-      setError('No readable documents found (looked for .md, .txt, .rst).');
+      setError('No readable documents found (looked for .md, .txt, .rst, .pdf).');
       return;
     }
     workerRef.current?.terminate();
     setError(null);
     setBusy({ stage: 'starting', detail: `${files.length} documents` });
+
+    // PDFs become markdown-ish text HERE, before the worker sees anything.
+    // pdf.js runs its own worker and nesting that inside ours hung forever
+    // with no error; on the main thread it is the ordinary path, and the
+    // parsing still happens off-thread inside pdf.js's own worker.
+    const warnings = [];
+    const texts = [];
+    for (const f of files) {
+      if (!f.data) { texts.push(f); continue; }
+      setBusy({ stage: 'pdf', detail: `reading ${f.path}` });
+      try {
+        const { pdfToText } = await import('./lib/knowledge/pdf.js');
+        const { text, pages, headings } = await pdfToText(f.data, f.path);
+        setBusy({ stage: 'pdf', detail: `${f.path}: ${pages} pages, ${headings} headings` });
+        // Flagged, not inferred from the extension: pdfToText emits `#`
+        // headings, and a .pdf path would otherwise skip heading detection.
+        texts.push({ path: f.path, text, markdownish: true });
+      } catch (err) {
+        // One unreadable PDF (a scan, an encrypted file) must not abandon the
+        // whole base — the other documents are still worth indexing.
+        warnings.push(String(err?.message ?? err));
+      }
+    }
+
+    if (!texts.length) {
+      setBusy(null);
+      setError(warnings[0] ?? 'Nothing readable in those files.');
+      return;
+    }
+    files = texts;
     const w = new Worker(new URL('./worker/knowledge-worker.js', import.meta.url), { type: 'module' });
     workerRef.current = w;
     w.onerror = (ev) => {
@@ -220,11 +250,13 @@ export default function App() {
         setKnowledge({
           index: msg.index,
           documents: msg.documents,
+          warnings,
           stats: { documents: msg.documents.length, passages: msg.index.size },
         });
-        // The documents ARE the sources, so the file tree and code pane show
-        // them with no extra work.
-        setSources(inMemorySources(files.map((f) => ({ path: f.path, src: f.text }))));
+        // Sources come from the WORKER, not the picker: a PDF has no text on
+        // this side, only bytes. What the code pane shows is the extracted
+        // text — which is also what the passages' line numbers refer to.
+        setSources(inMemorySources(msg.texts.map((t) => ({ path: t.path, src: t.text }))));
         w.terminate();
         workerRef.current = null;
       } else if (msg.type === 'error') {

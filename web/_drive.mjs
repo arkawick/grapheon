@@ -214,13 +214,33 @@ const mdFiles = repoFiles.length ? [] : [];
     }
   }
 }
-await page.evaluate(({ docs }) => window.__ingestDocuments(docs, 'grapheon-docs'), { docs: mdFiles });
+// Plus a generated PDF, so the pdf.js path and the font-size heading
+// heuristic are exercised on every run.
+const { makeTestPdf } = await import('./_fixture-pdf.mjs');
+const pdfBytes = [...makeTestPdf()];
+await page.evaluate(({ docs, pdf }) => window.__ingestDocuments(
+  [...docs, { path: 'retrieval.pdf', data: new Uint8Array(pdf).buffer }],
+  'grapheon-docs'
+), { docs: mdFiles, pdf: pdfBytes });
 await page.waitForFunction(
   () => document.querySelector('.corpus')?.textContent === 'grapheon-docs',
   { timeout: 90000 }
 );
 await page.click('.nav a[href="#/knowledge"]');
 await page.waitForSelector('.kb-query', { timeout: 10000 });
+// Query terms that only exist inside the PDF: proves pdf.js text made it all
+// the way into the index, not merely that the file was accepted.
+await page.fill('.kb-query', 'term saturation length normalisation');
+await page.waitForTimeout(500);
+const pdfHit = await page.evaluate(() => {
+  const el = [...document.querySelectorAll('.kb-hit')]
+    .find((e) => e.querySelector('.kb-source')?.textContent.includes('retrieval.pdf'));
+  return el && {
+    heading: el.querySelector('.kb-heading')?.textContent,
+    source: el.querySelector('.kb-source')?.textContent,
+  };
+});
+
 await page.fill('.kb-query', 'how does blast radius certainty work');
 await page.waitForTimeout(500);
 const kb = await page.evaluate(() => ({
@@ -346,6 +366,7 @@ console.log(`dividers   : ${resize.count} handles; drag -140px took code ${resiz
 console.log(`search     : ${searchFoot} in ${searchMs}ms (cold); hit jumped to ${jumped.path} line ${jumped.target}`);
 console.log(`tabs       : [${tabsInfo.open.join(', ')}] active=${tabsInfo.active}`);
 console.log(`knowledge  : ${kb.stats}; ${kb.nodes}; ${kb.hits} hits, ${kb.marks} highlights, top="${kb.top}" -> ${kb.opened}`);
+console.log(`pdf        : ${pdfHit ? `indexed, hit "${pdfHit.heading}" at ${pdfHit.source}` : 'NO HIT — pdf text did not reach the index'}`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);
 console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, mobile-{atlas,detail,blast,code}.png`);
 if (errors.length) {

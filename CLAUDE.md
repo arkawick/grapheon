@@ -336,6 +336,25 @@ graph), `worker/knowledge-worker.js`, `pages/KnowledgePage.jsx`.
 - `related` edges are **INFERRED** (word overlap is a guess); `contains` and
   `subsection` are EXTRACTED (the document says so).
 
+**PDF** (`lib/knowledge/pdf.js`) converts to markdown-ish text — headings by
+font size vs the document's median — so `parseDocument` handles a PDF exactly
+like a `.md`. Three traps, each cost a round:
+- **pdf.js must run on the MAIN THREAD.** It spawns a worker of its own, and
+  nesting that inside the knowledge worker made `getDocument()` hang forever
+  with no error — the promise simply never settled. App converts PDFs, then
+  hands text to the worker.
+- **`parseDocument` needs `markdownish: true` passed explicitly.** It decides
+  on the file extension otherwise, so a `.pdf` path ignored every `#` heading
+  pdf.js had just detected and the whole document collapsed into one untitled
+  passage.
+- In pdf.js 6 the document proxy has **no `destroy()`** — keep the loading
+  task and destroy that, or the worker and the file's buffers leak.
+- Scanned PDFs have no text layer and are reported, not silently dropped.
+  Verified against a real one: `AEON_poster.pdf` yields 0 text items.
+- The drive's fixture is a **hand-built PDF** (`web/_fixture-pdf.mjs`) with two
+  font sizes, so the heading heuristic is actually exercised. Real PDFs on this
+  machine are an image-only poster and a personal CV; neither belongs in a repo.
+
 ## File explorer
 
 `web/src/FileTree.jsx` + `lib/filetree.js`. The repo as a directory, beside the

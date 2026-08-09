@@ -40,7 +40,11 @@ onmessage = async (e) => {
       return { ...f, path };
     });
 
-    const documents = unique.map(parseDocument);
+    // Everything arriving here is already TEXT. PDFs were converted on the
+    // main thread (see lib/knowledge/pdf.js for why), so this worker knows
+    // nothing about formats.
+    const resolved = unique;
+    const documents = resolved.map(parseDocument);
 
     const passages = [];
     for (const d of documents) for (const s of d.sections) passages.push(...s.passages);
@@ -68,6 +72,10 @@ onmessage = async (e) => {
       layout: laidOut,
       edges,
       index,
+      // Extracted text goes back so the code pane can show a PDF's contents —
+      // it cannot render the original, and the line numbers passages point at
+      // are lines of THIS text.
+      texts: resolved.map(({ path, text }) => ({ path, text })),
       // Sections carry their passages for the query panel; the map only needs
       // the nodes, which are already in `layout`.
       documents: documents.map((d) => ({

@@ -25,9 +25,13 @@ const slug = (s) =>
  * @param {{path: string, text: string}} file
  * @returns {{path, title, sections: Array}}
  */
-export function parseDocument({ path, text }) {
+export function parseDocument({ path, text, markdownish }) {
   const lines = text.split('\n');
-  const isMd = /\.(md|markdown|rst)$/i.test(path);
+  // `markdownish` is set for text CONVERTED to markdown — a PDF whose headings
+  // were detected by font size arrives with `#` prefixes but a .pdf path, and
+  // deciding on the extension alone silently ignored every one of them,
+  // leaving the whole document as a single untitled passage.
+  const isMd = markdownish ?? /\.(md|markdown|rst)$/i.test(path);
 
   const sections = [];
   let current = null;

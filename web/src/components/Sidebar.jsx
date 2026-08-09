@@ -161,7 +161,7 @@ export default function Sidebar() {
             ref={docsRef}
             type="file"
             multiple
-            accept=".md,.markdown,.txt,.rst,.text"
+            accept=".md,.markdown,.txt,.rst,.text,.pdf"
             style={{ display: 'none' }}
             onChange={onDocs}
           />
