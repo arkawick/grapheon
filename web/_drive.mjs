@@ -272,6 +272,37 @@ kb.opened = await page.evaluate(() => document.querySelector('.code-title .mono'
 await page.screenshot({ path: 'knowledge.png' });
 await page.click('.code-head .close');
 
+// --- history -----------------------------------------------------------------
+// Two corpora were built above (a code one, then a knowledge one that replaced
+// it). Restoring must bring the first back WITH its sources, not just its map.
+await page.click('.nav a[href="#/history"]');
+await page.waitForSelector('.hist-item', { timeout: 10000 });
+const saved = await page.$$eval('.hist-item', (els) => els.map((el) => ({
+  kind: el.querySelector('.hist-kind')?.textContent,
+  name: el.querySelector('.hist-name')?.textContent,
+  current: !!el.querySelector('.hist-current'),
+})));
+const restoreStart = Date.now();
+await page.click('.hist-item:not(.active) .hist-actions button');
+await page.waitForFunction(
+  () => document.querySelector('.corpus')?.textContent === 'grapheon-self',
+  { timeout: 30000 }
+);
+const restoreMs = Date.now() - restoreStart;
+// Sources must survive the round trip, or "restore" only restored a picture.
+await page.click('.nav a[href="#/"]');
+await page.fill('.search input', 'AtlasRenderer');
+await page.waitForSelector('.results li', { timeout: 8000 });
+await page.click('.results li');
+await page.waitForSelector('.view-code', { timeout: 8000 });
+await page.click('.view-code');
+await page.waitForSelector('.code-pane .code-line', { timeout: 10000 });
+const restoredSource = await page.evaluate(() => ({
+  path: document.querySelector('.code-title .mono')?.textContent,
+  lines: document.querySelectorAll('.code-line').length,
+}));
+await page.click('.code-head .close');
+
 // --- mobile pass: phone viewport, touch --------------------------------------
 // hasTouch flips HAS_DIR_PICKER, so this also exercises the zip-only sidebar
 // branch the Android shell ships with.
@@ -380,6 +411,7 @@ console.log(`dividers   : ${resize.count} handles; drag -140px took code ${resiz
 console.log(`search     : ${searchFoot} in ${searchMs}ms (cold); hit jumped to ${jumped.path} line ${jumped.target}`);
 console.log(`tabs       : [${tabsInfo.open.join(', ')}] active=${tabsInfo.active}`);
 console.log(`knowledge  : ${kb.stats}; ${kb.nodes}; ${kb.hits} hits, ${kb.marks} highlights, top="${kb.top}" -> ${kb.opened}`);
+console.log(`history    : ${saved.length} saved [${saved.map((s) => `${s.kind}:${s.name}`).join(', ')}]; restored in ${restoreMs}ms with sources intact (${restoredSource.path}, ${restoredSource.lines} lines)`);
 console.log(`pdf        : ${pdfHit ? `indexed, hit "${pdfHit.heading}" at ${pdfHit.source}` : 'NO HIT — pdf text did not reach the index'}`
   + ` (parsed with Uint8Array.toHex removed${hadToHex ? '' : '; runtime lacked it anyway'})`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);

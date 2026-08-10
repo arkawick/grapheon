@@ -751,3 +751,60 @@ body.resizing * { cursor: col-resize !important; }
 .logo { display: block; user-select: none; }
 .brand { align-items: center; }
 .menu-btn .logo { margin-left: 1px; }
+
+/* --- history ---------------------------------------------------------------- */
+.hist-item {
+  padding: 9px 10px; margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.hist-item.active { border-color: rgba(125, 211, 252, 0.4); }
+.hist-item header { display: flex; align-items: center; gap: 7px; }
+.hist-kind {
+  flex-shrink: 0; font-size: 9px; text-transform: uppercase;
+  letter-spacing: 0.05em; padding: 1px 6px; border-radius: 999px;
+}
+.hist-kind.code { background: rgba(125, 211, 252, 0.16); color: var(--accent); }
+.hist-kind.knowledge { background: rgba(167, 139, 250, 0.18); color: #c4b5fd; }
+.hist-name {
+  font-weight: 600; font-size: 12.5px; flex: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hist-current { font-size: 10px; color: var(--accent); }
+.hist-meta { font-size: 11px; line-height: 1.5; margin: 4px 0 7px; }
+.hist-actions { display: flex; gap: 6px; }
+.hist-actions button {
+  padding: 4px 12px; border-radius: 6px; font: inherit; font-size: 12px;
+  background: rgba(125, 211, 252, 0.12); color: var(--accent);
+  border: 1px solid rgba(125, 211, 252, 0.35); cursor: pointer;
+}
+.hist-actions button:disabled { opacity: 0.5; cursor: default; }
+.hist-actions .ghost,
+.hist-foot .ghost {
+  background: none; border-color: var(--border); color: var(--dim);
+}
+.hist-actions .ghost:hover, .hist-foot .ghost:hover { color: #fca5a5; }
+.hist-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--border); font-size: 11px;
+}
+.hist-foot .ghost {
+  padding: 3px 10px; border: 1px solid var(--border); border-radius: 6px;
+  font: inherit; font-size: 11px; cursor: pointer;
+}
+
+/* --- recent queries --------------------------------------------------------- */
+.kb-recent { margin-bottom: 12px; }
+.kb-recent h3 {
+  margin: 0 0 6px; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--dim);
+}
+.kb-recent button {
+  display: block; width: 100%; text-align: left;
+  padding: 4px 8px; margin-bottom: 3px; border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border);
+  color: var(--text); font: inherit; font-size: 11.5px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kb-recent button:hover { background: rgba(255, 255, 255, 0.07); }

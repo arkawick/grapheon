@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useGraph } from '../GraphContext.js';
 import { search } from '../lib/knowledge/bm25.js';
+import { recentQueries, rememberQuery } from '../lib/history.js';
 
 /**
  * Ask the knowledge base a question, get the passages that answer it.
@@ -10,13 +11,27 @@ import { search } from '../lib/knowledge/bm25.js';
  * source beats being told a summary you then have to go and verify.
  */
 export default function KnowledgePage() {
-  const { knowledge, nodeById, focus, openFile, layout } = useGraph();
+  const { knowledge, nodeById, focus, openFile, layout, corpusName } = useGraph();
   const [query, setQuery] = useState('');
+  const [recent, setRecent] = useState(() => recentQueries(corpusName));
+
+  useEffect(() => setRecent(recentQueries(corpusName)), [corpusName]);
 
   const results = useMemo(() => {
     if (!knowledge?.index || query.trim().length < 2) return [];
     return search(knowledge.index, query.trim(), 25);
   }, [knowledge, query]);
+
+  // Remembered on a pause, not per keystroke — otherwise the list fills with
+  // every prefix of the question you were typing.
+  useEffect(() => {
+    if (!results.length) return;
+    const t = setTimeout(() => {
+      rememberQuery(corpusName, query);
+      setRecent(recentQueries(corpusName));
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [results, query, corpusName]);
 
   if (!knowledge) {
     return (
@@ -66,6 +81,15 @@ export default function KnowledgePage() {
       {query.trim().length >= 2 && !results.length && (
         <p className="dim empty">Nothing matches. Try different words.</p>
       )}
+      {query.trim().length < 2 && recent.length > 0 && (
+        <div className="kb-recent">
+          <h3>Recent</h3>
+          {recent.map((q) => (
+            <button key={q} onClick={() => setQuery(q)}>{q}</button>
+          ))}
+        </div>
+      )}
+
       {query.trim().length < 2 && (
         <p className="dim empty">
           Ranked by BM25 over every passage. Matching terms are highlighted;

@@ -310,6 +310,26 @@ highlight.js, python + javascript only.
   code pane, then the selection, before exiting. Registered as a stack so
   future overlays can join it. Dynamic-imported, so the web build is unaffected.
 
+## History (lib/history.js)
+
+Saved corpora in IndexedDB — `pages/HistoryPage.jsx`, restored via
+`restoreCorpus` in App. Before this, building a corpus destroyed the previous
+one outright.
+- **IndexedDB, not localStorage**: megabytes, and structured clone stores the
+  BM25 index's Maps as-is. JSON would be lossy and slow.
+- **Two object stores.** `meta` is tiny and is what the page lists; `data`
+  holds payloads. Listing must never deserialise every corpus to show names.
+- **Bounded** to 8 entries / 120 MB, oldest evicted. Unbounded, it eventually
+  hits the browser quota and fails at WRITE time — after the user has waited
+  through a build.
+- **Saving must never fail a build.** The corpus is loaded and usable whether
+  or not it persisted, so a full quota or private mode logs a warning and is
+  otherwise ignored.
+- **Restoring clears selection, tabs and openPath first** — they hold ids from
+  the outgoing corpus and would point at nodes the new layout does not have.
+- Recent queries are per-corpus in localStorage, written on a 1.2s pause, not
+  per keystroke (otherwise the list fills with prefixes of one question).
+
 ## Knowledge base (lib/knowledge/)
 
 Second corpus type: documents, retrieved rather than traversed. `parse.js`

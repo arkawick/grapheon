@@ -16,6 +16,7 @@ const NAV = [
   { to: '/', label: 'Atlas', hint: 'the map' },
   { to: '/blast', label: 'Blast Radius', hint: 'what breaks if this changes' },
   { to: '/knowledge', label: 'Knowledge', hint: 'ask your documents' },
+  { to: '/history', label: 'History', hint: 'switch back without re-parsing' },
 ];
 
 export default function Sidebar() {

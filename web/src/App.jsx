@@ -6,6 +6,8 @@ import Sidebar from './components/Sidebar.jsx';
 import AtlasPage from './pages/AtlasPage.jsx';
 import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
 import KnowledgePage from './pages/KnowledgePage.jsx';
+import HistoryPage from './pages/HistoryPage.jsx';
+import { saveCorpus, loadCorpus } from './lib/history.js';
 import CodePane from './CodePane.jsx';
 import FileTree from './FileTree.jsx';
 import SearchPanel from './SearchPanel.jsx';
@@ -182,6 +184,14 @@ export default function App() {
         // costs nothing here. `readable` is the wider set: every text file,
         // including the ones the extractor never parsed.
         setSources(inMemorySources(readable));
+        // Saved so switching away is no longer destructive. Failure here is
+        // not fatal — the corpus is loaded and usable either way — so a full
+        // quota or a private-mode block must not surface as a build error.
+        saveCorpus({
+          name, kind: 'code',
+          layout: msg.layout, edges: msg.edges,
+          sources: Object.fromEntries(readable.map((f) => [f.path, f.src])),
+        }).catch((e) => console.warn('[history] not saved:', e));
         w.terminate();
         workerRef.current = null;
       } else if (msg.type === 'error') {
@@ -257,6 +267,12 @@ export default function App() {
         // this side, only bytes. What the code pane shows is the extracted
         // text — which is also what the passages' line numbers refer to.
         setSources(inMemorySources(msg.texts.map((t) => ({ path: t.path, src: t.text }))));
+        saveCorpus({
+          name, kind: 'knowledge',
+          layout: msg.layout, edges: msg.edges,
+          sources: Object.fromEntries(msg.texts.map((t) => [t.path, t.text])),
+          knowledge: { index: msg.index, documents: msg.documents },
+        }).catch((e) => console.warn('[history] not saved:', e));
         w.terminate();
         workerRef.current = null;
       } else if (msg.type === 'error') {
@@ -267,6 +283,35 @@ export default function App() {
       }
     };
     w.postMessage({ files, name });
+  }, []);
+
+  /** Bring a saved corpus back without re-parsing anything. */
+  const restoreCorpus = useCallback(async (id) => {
+    const saved = await loadCorpus(id);
+    if (!saved) throw new Error('That corpus is no longer stored.');
+    setError(null);
+    setBusy({ stage: 'restoring', detail: saved.name });
+    // Clear anything belonging to the outgoing corpus first: stale tabs and a
+    // stale selection would point at ids the new layout does not contain.
+    setSelected(null);
+    setOpenPath(null);
+    setTabs([]);
+    setCodeOpen(false);
+    setKnowledge(saved.knowledge
+      ? {
+          ...saved.knowledge,
+          warnings: [],
+          stats: {
+            documents: saved.knowledge.documents.length,
+            passages: saved.knowledge.index.size,
+          },
+        }
+      : null);
+    setSources(inMemorySources(
+      Object.entries(saved.sources ?? {}).map(([path, src]) => ({ path, src }))
+    ));
+    setCorpus({ name: saved.name, layout: saved.layout, edges: saved.edges });
+    setBusy(null);
   }, []);
 
   useEffect(() => () => workerRef.current?.terminate(), []);
@@ -396,10 +441,10 @@ export default function App() {
     extractRepo, busy,
     sources, codeOpen, setCodeOpen, treeOpen, setTreeOpen, openFile,
     searchOpen, setSearchOpen, menuOpen, setMenuOpen, narrow,
-    knowledge, ingestDocuments,
+    knowledge, ingestDocuments, restoreCorpus,
   }), [corpus, adjacency, ensureAdjacency, nodeById, nodeByPath, selected, focus, highlight,
        setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile,
-       searchOpen, menuOpen, narrow, knowledge, ingestDocuments]);
+       searchOpen, menuOpen, narrow, knowledge, ingestDocuments, restoreCorpus]);
 
   const layout = corpus?.layout;
 
@@ -489,6 +534,7 @@ export default function App() {
                 <Route path="/" element={<AtlasPage />} />
                 <Route path="/blast" element={<BlastRadiusPage />} />
                 <Route path="/knowledge" element={<KnowledgePage />} />
+                <Route path="/history" element={<HistoryPage />} />
               </Routes>
             )}
           </main>

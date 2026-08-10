@@ -158,6 +158,20 @@ Debug builds on the host still work if you have a JDK + SDK:
 The app is the static site verbatim — extraction runs in the WebView's
 worker, on-device, offline.
 
+## History
+
+Loading a corpus used to *destroy* the previous one — opening a second repo
+meant re-picking the folder and re-parsing to get the first back. Every build
+is now saved to IndexedDB, and **History** lists them for instant restore
+(measured: **261 ms**, versus seconds of re-extraction), with sources, edges
+and the knowledge index all intact.
+
+Stored on the device only. Bounded to 8 corpora / 120 MB, oldest evicted
+first — they're large and always regenerable, and an unbounded cache would
+eventually fail at write time, which is the worst moment to find out.
+
+The Knowledge query box also keeps your recent questions, per corpus.
+
 ## Knowledge base
 
 A second, separate use case: point it at documents instead of code.
