@@ -159,6 +159,25 @@ Debug builds on the host still work if you have a JDK + SDK:
 The app is the static site verbatim — extraction runs in the WebView's
 worker, on-device, offline.
 
+## Insights
+
+The one page that talks first. Everything else answers a question you have to
+know to ask; **Insights** computes what the graph already noticed:
+
+- **Most depended-upon** — change these and the most breaks
+- **Possibly unused** — callables nothing references
+- **Cycles** — groups that depend on each other
+- **Coupling** — entities reaching across several subsystems
+
+The unused list is the one that needed care. Raw "no inbound reference" was
+**156 of Aeon's 335 callables** — a number nobody would trust, because a
+FastAPI route is called by the framework, not by code the parser can see. Entry
+points are detected from the graph itself (a `@router.get` decorator shows up
+as a reference to a file-scoped verb) and held back separately: **96 likely
+unused, 60 excluded as entry points or runtime hooks**.
+
+**Export report** writes it all as markdown; **Map as PNG** exports the Atlas.
+
 ## History
 
 Loading a corpus used to *destroy* the previous one — opening a second repo
@@ -290,6 +309,11 @@ list its relations, each tagged EXTRACTED or INFERRED.
 
 - *Impact* — what breaks if this changes (follows edges pointing at the root)
 - *Dependencies* — what you'd need to understand to change it
+
+It takes a **change set**, not just one node — real changes touch several
+things at once, and asking about them together is not three separate
+questions: something two hops from each of three roots is two hops away, not
+six. Results export as a markdown report you can paste into a PR.
 
 Depth is adjustable 1–6, and results are grouped into rings by distance.
 **Certainty propagates along the path, not per edge** — one inferred hop

@@ -84,6 +84,44 @@ const tally = (await page.textContent('.tally'))?.replace(/\s+/g, ' ').trim();
 const rings = await page.$$eval('.ring h3', (hs) => hs.map((h) => h.textContent.trim()));
 await page.screenshot({ path: 'blast.png' });
 
+// A change set of several entities is one traversal, not a union of separate
+// ones: something two hops from each root is two hops away, not six.
+const singleTotal = await page.textContent('.tally .big');
+await page.click('.chip.add');
+await page.waitForTimeout(300);
+await page.fill('.search input', 'instances.py');
+await page.waitForSelector('.results li', { timeout: 8000 });
+await page.click('.results li');
+await page.waitForTimeout(300);
+await page.click('.chip.add');
+await page.waitForTimeout(500);
+const multi = await page.evaluate(() => ({
+  total: document.querySelector('.tally .big')?.textContent,
+  chips: document.querySelectorAll('.change-set .chip:not(.add)').length,
+}));
+const impactDl = page.waitForEvent('download', { timeout: 15000 });
+await page.click('.blast .view-code');
+const impactFile = (await impactDl).suggestedFilename();
+
+// --- insights ----------------------------------------------------------------
+// Computed, not asked for. The entry-point split is the load-bearing part: raw
+// "unreferenced" was 156 of Aeon's 335 callables, a list nobody would trust.
+await page.click('.nav a[href="#/insights"]');
+await page.waitForSelector('.ins-tabs', { timeout: 15000 });
+await page.waitForTimeout(600);
+const insights = await page.evaluate(() => ({
+  tabs: [...document.querySelectorAll('.ins-tabs button')].map((b) => b.textContent.replace(/\s+/g, ' ').trim()),
+  topHub: document.querySelector('.ins-row .ins-label')?.textContent,
+}));
+await page.click('.ins-tabs button:nth-child(2)');
+await page.waitForTimeout(250);
+insights.excluded = await page.evaluate(() =>
+  /(\d+) more look like framework/.exec(document.querySelector('.insights .caveat')?.textContent ?? '')?.[1] ?? '0');
+const reportDl = page.waitForEvent('download', { timeout: 15000 });
+await page.click('.ins-actions button');
+insights.report = (await reportDl).suggestedFilename();
+await page.screenshot({ path: 'insights.png' });
+
 // --- code viewer -------------------------------------------------------------
 // Search rather than clicking the map: a deterministic entity with real source.
 await page.click('.nav a[href="#/"]');
@@ -400,8 +438,10 @@ await browser.close();
 console.log(`sidebar    : ${status.replace(/\s+/g, ' ').trim()}`);
 console.log(`selected   : ${selected}`);
 console.log(`connections: ${connections}`);
+console.log(`insights   : ${insights.tabs.join(' | ')}; top hub ${insights.topHub}; ${insights.excluded} entry points excluded from "unused"; exported ${insights.report}`);
 console.log(`blast      : ${tally}`);
 console.log(`rings      : ${rings.join(' | ')}`);
+console.log(`change set : ${multi.chips} roots took impact ${singleTotal} -> ${multi.total}; exported ${impactFile}`);
 console.log(`self-map   : ${selfStats} (${repoFiles.length} files extracted in-browser)`);
 console.log(`code       : ${code.lines} lines, ${code.hljs} highlight spans, ${code.marked} gutter marks; map reflowed to ${code.canvasWidth}px`);
 console.log(`mobile     : bar ${bar.content}px content in ${bar.width}px (want equal); blast sheet top=${sheet.top}px width=${sheet.width}px`);

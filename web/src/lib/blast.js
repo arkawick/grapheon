@@ -21,15 +21,20 @@
 
 /**
  * @param {Map<string, Array>} adjacency  id -> [{ id, rel, conf, dir }]
- * @param {string} rootId
+ * @param {string|string[]} root  one entity, or the SET you are changing.
+ *   Multiple roots are the real question — "I am touching these three files,
+ *   what breaks?" — and answering it as a single traversal rather than a union
+ *   of separate ones matters: an entity two hops from each of three roots is
+ *   two hops away, not six.
  * @param {{depth?: number, direction?: 'in'|'out'}} opts
  * @returns {Map<string, {depth: number, certain: boolean, via: string, from: string}>}
  */
-export function blastRadius(adjacency, rootId, { depth = 3, direction = 'in' } = {}) {
+export function blastRadius(adjacency, root, { depth = 3, direction = 'in' } = {}) {
+  const roots = Array.isArray(root) ? root : [root];
   const reached = new Map();
-  reached.set(rootId, { depth: 0, certain: true, via: null, from: null });
+  for (const r of roots) reached.set(r, { depth: 0, certain: true, via: null, from: null });
 
-  let frontier = [rootId];
+  let frontier = [...roots];
   for (let d = 1; d <= depth && frontier.length; d++) {
     const next = [];
     for (const id of frontier) {
@@ -54,7 +59,8 @@ export function blastRadius(adjacency, rootId, { depth = 3, direction = 'in' } =
     frontier = next;
   }
 
-  reached.delete(rootId);
+  // The roots are what you changed, not what the change reached.
+  for (const r of roots) reached.delete(r);
   return reached;
 }
 

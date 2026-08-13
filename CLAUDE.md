@@ -337,6 +337,24 @@ highlight.js, python + javascript only.
   code pane, then the selection, before exiting. Registered as a stack so
   future overlays can join it. Dynamic-imported, so the web build is unaffected.
 
+## Insights (lib/insights.js) + export (lib/export.js)
+
+Computed from data already in memory; pure over (nodes, adjacency) so it tests
+without a browser.
+- **Structural edges are not usage.** `contains`/`method`/`rationale_for` say
+  how code is FILED. Count them and every function looks referenced.
+- **Entry points must be separated from dead code, or the feature is
+  worthless.** Raw "no inbound reference" was 156 of Aeon's 335 callables —
+  mostly FastAPI handlers the framework calls. Detected from the GRAPH (a
+  `@router.get` decorator appears as an outbound reference to a file-scoped
+  verb like `api_py_get`), not from naming conventions. Result: 96 likely, 60
+  held back. If that split ever collapses, check `ENTRY_VERBS` first.
+- **Tarjan is iterative on purpose** — the recursive form blows the stack on a
+  real corpus, and a test pins it at 20k nodes.
+- **The map PNG uses Pixi's `extract` API**, which re-renders into a render
+  texture. Reading the canvas back directly returns a blank image with no
+  error — no `preserveDrawingBuffer` (same trap as the drive's screenshots).
+
 ## History (lib/history.js)
 
 Saved corpora in IndexedDB — `pages/HistoryPage.jsx`, restored via

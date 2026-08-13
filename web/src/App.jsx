@@ -7,6 +7,7 @@ import AtlasPage from './pages/AtlasPage.jsx';
 import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
 import KnowledgePage from './pages/KnowledgePage.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
+import InsightsPage from './pages/InsightsPage.jsx';
 import { saveCorpus, loadCorpus } from './lib/history.js';
 import CodePane from './CodePane.jsx';
 import FileTree from './FileTree.jsx';
@@ -441,7 +442,7 @@ export default function App() {
     extractRepo, busy,
     sources, codeOpen, setCodeOpen, treeOpen, setTreeOpen, openFile,
     searchOpen, setSearchOpen, menuOpen, setMenuOpen, narrow,
-    knowledge, ingestDocuments, restoreCorpus,
+    knowledge, ingestDocuments, restoreCorpus, renderer: rendererRef,
   }), [corpus, adjacency, ensureAdjacency, nodeById, nodeByPath, selected, focus, highlight,
        setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile,
        searchOpen, menuOpen, narrow, knowledge, ingestDocuments, restoreCorpus]);
@@ -534,6 +535,7 @@ export default function App() {
                 <Route path="/" element={<AtlasPage />} />
                 <Route path="/blast" element={<BlastRadiusPage />} />
                 <Route path="/knowledge" element={<KnowledgePage />} />
+                <Route path="/insights" element={<InsightsPage />} />
                 <Route path="/history" element={<HistoryPage />} />
               </Routes>
             )}

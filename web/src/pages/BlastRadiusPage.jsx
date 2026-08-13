@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useGraph } from '../GraphContext.js';
 import SearchBox from '../SearchBox.jsx';
 import { blastRadius, byDepth } from '../lib/blast.js';
+import { blastMarkdown, download } from '../lib/export.js';
 
 const DIRECTIONS = {
   in: {
@@ -17,11 +18,16 @@ const DIRECTIONS = {
 };
 
 export default function BlastRadiusPage() {
-  const { layout, adjacency, ensureAdjacency, nodeById, selected, focus, highlight } = useGraph();
+  const {
+    layout, adjacency, ensureAdjacency, nodeById, selected, focus, highlight, corpusName,
+  } = useGraph();
 
   const [depth, setDepth] = useState(3);
   const [direction, setDirection] = useState('in');
   const [adj, setAdj] = useState(adjacency);
+  // Entities pinned into the change set. Empty means "just whatever is
+  // selected", which keeps the single-node flow exactly as it was.
+  const [pinned, setPinned] = useState([]);
 
   useEffect(() => {
     if (adj) return;
@@ -30,16 +36,23 @@ export default function BlastRadiusPage() {
     return () => { stale = true; };
   }, [adj, ensureAdjacency]);
 
-  const result = useMemo(() => {
-    if (!adj || !selected) return null;
-    return blastRadius(adj, selected.id, { depth, direction });
-  }, [adj, selected, depth, direction]);
+  // Changing corpus invalidates every pinned id.
+  useEffect(() => setPinned([]), [corpusName]);
 
-  // Light up the whole radius on the map, not just direct neighbours.
+  const roots = useMemo(() => {
+    if (pinned.length) return pinned;
+    return selected ? [selected] : [];
+  }, [pinned, selected]);
+
+  const result = useMemo(() => {
+    if (!adj || !roots.length) return null;
+    return blastRadius(adj, roots.map((r) => r.id), { depth, direction });
+  }, [adj, roots, depth, direction]);
+
   useEffect(() => {
-    if (!result || !selected) { highlight(null); return; }
-    highlight([selected.id, ...result.keys()]);
-  }, [result, selected, highlight]);
+    if (!result || !roots.length) { highlight(null); return; }
+    highlight([...roots.map((r) => r.id), ...result.keys()]);
+  }, [result, roots, highlight]);
 
   useEffect(() => () => highlight(null), [highlight]);
 
@@ -47,6 +60,11 @@ export default function BlastRadiusPage() {
   const total = result ? result.size : 0;
   const uncertain = result ? [...result.values()].filter((r) => !r.certain).length : 0;
   const dir = DIRECTIONS[direction];
+
+  const pin = (node) => {
+    if (!node) return;
+    setPinned((p) => (p.some((x) => x.id === node.id) ? p : [...p, node]));
+  };
 
   return (
     <>
@@ -82,20 +100,37 @@ export default function BlastRadiusPage() {
 
         {!adj && <p className="dim">Loading edges…</p>}
 
-        {adj && !selected && (
+        {adj && !roots.length && (
           <p className="dim empty">
             Search above or click a node on the map to pick a starting point.
           </p>
         )}
 
-        {adj && selected && (
+        {adj && roots.length > 0 && (
           <>
-            <div className="root">
-              <span className="dot lg" style={{ background: `hsl(${selected.h} 68% 62%)` }} />
-              <div>
-                <div className="root-label">{selected.l}</div>
-                {selected.a?.path && <div className="mono dim">{selected.a.path}</div>}
-              </div>
+            {/* The change set. Real changes touch several things at once, and
+                asking about them together is not the same as asking three
+                separate questions — an entity two hops from each root is two
+                hops away, not six. */}
+            <div className="change-set">
+              {roots.map((r) => (
+                <span key={r.id} className="chip" title={r.a?.path}>
+                  <span className="dot" style={{ background: `hsl(${r.h} 68% 62%)` }} />
+                  {r.l}
+                  {pinned.length > 0 && (
+                    <button
+                      aria-label={`Remove ${r.l}`}
+                      onClick={() => setPinned((p) => p.filter((x) => x.id !== r.id))}
+                    >×</button>
+                  )}
+                </span>
+              ))}
+              {selected && !roots.some((r) => r.id === selected.id) && (
+                <button className="chip add" onClick={() => pin(selected)}>+ {selected.l}</button>
+              )}
+              {!pinned.length && selected && (
+                <button className="chip add" onClick={() => pin(selected)}>+ add to set</button>
+              )}
             </div>
 
             <div className="tally">
@@ -104,6 +139,7 @@ export default function BlastRadiusPage() {
                 {direction === 'in' ? 'entities affected' : 'entities depended on'}
                 <br />
                 within {depth} hop{depth > 1 ? 's' : ''}
+                {roots.length > 1 ? ` of ${roots.length} changes` : ''}
               </div>
             </div>
 
@@ -120,6 +156,18 @@ export default function BlastRadiusPage() {
             )}
 
             {total === 0 && <p className="dim empty">{dir.empty}</p>}
+
+            {total > 0 && (
+              <button
+                className="view-code"
+                onClick={() => download(
+                  `${corpusName}-impact.md`,
+                  blastMarkdown(corpusName, roots, rings, direction, depth, nodeById)
+                )}
+              >
+                Export impact report
+              </button>
+            )}
 
             {rings.map(([d, items]) => (
               <section key={d} className="ring">

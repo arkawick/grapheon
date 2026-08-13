@@ -14,6 +14,7 @@ const HAS_DIR_PICKER = !('ontouchstart' in window) || navigator.maxTouchPoints =
 
 const NAV = [
   { to: '/', label: 'Atlas', hint: 'the map' },
+  { to: '/insights', label: 'Insights', hint: 'what the graph noticed' },
   { to: '/blast', label: 'Blast Radius', hint: 'what breaks if this changes' },
   { to: '/knowledge', label: 'Knowledge', hint: 'ask your documents' },
   { to: '/history', label: 'History', hint: 'switch back without re-parsing' },
