@@ -13,7 +13,7 @@
  * The extra files cost nothing at ingest — they are already in memory; we were
  * simply discarding them.
  */
-const PARSEABLE = new Set(['.py', '.js', '.jsx']);
+const PARSEABLE = new Set(['.py', '.js', '.jsx', '.ts', '.tsx', '.mts', '.cts']);
 
 // Readable-but-not-parseable: config, docs, and the shape of the project.
 const READABLE = new Set([

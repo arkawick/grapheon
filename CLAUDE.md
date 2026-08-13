@@ -288,6 +288,33 @@ Where this stands as of 2026-08-02:
   build-tools, or `jarsigner -verify`),
   (4) the debug-APK-on-real-phone perf test is still owed.
 
+## TypeScript
+
+`.ts/.mts/.cts` use the TypeScript grammar, `.tsx` uses the **TSX** grammar —
+the plain TS grammar reads `<div>` as a type assertion, so every JSX element
+becomes a parse error and a .tsx file yields almost nothing. Interfaces, their
+members, type aliases, enums, `function_signature` and
+`abstract_class_declaration` are all entities; `interface extends` is an
+`inherits` edge.
+- **Path aliases were the whole ballgame.** `@/lib/utils` and baseUrl imports
+  (`components/ui/card`) are the norm in TS projects, and treating them as npm
+  packages left a real 79-file repo with **5 of 138 imports resolved** — a map
+  of disconnected dots that parsed perfectly. `resolveAlias` suffix-matches
+  against the corpus; that took it to 107/158, with every remaining external a
+  genuine package. If a TS graph ever looks sparse, check resolution before
+  anything else.
+- **Never suffix-match a bare single-segment specifier**: a local `utils.ts`
+  would swallow the npm package `utils`. Requires an alias prefix or a `/`.
+  Ambiguous matches resolve to nothing — a wrong edge is worse than none.
+- **`./foo.js` may mean `foo.ts`** (TS NodeNext names the compiled output).
+- **`import type` is a separate relation** (`imports_type`, weight 0.18): it
+  vanishes from the emitted JS, so it is real for a reader and absent at
+  runtime. Without the distinction a types-only barrel file lays out as the
+  hub of the application. Per-specifier `{ type X }` counts too.
+- `extract/extract.test.js` loads the REAL grammars rather than stubbing —
+  the risk here is what the grammar actually names its nodes, and a stub would
+  only encode my assumptions.
+
 ## Code viewer
 
 `web/src/CodePane.jsx` + `lib/sources.js`. A split MODE (sibling of `.stage`),

@@ -14,6 +14,7 @@ from Project-Kagami's Atlas; the feature vocabulary comes from Project-Aeon.
 
 ```
 extract/    JS/WASM port of graphify's extraction (runs in Node AND browser)
+            Python, JavaScript/JSX, TypeScript/TSX
 pipeline/   canonical graph -> Louvain -> ForceAtlas2 -> layout artifacts
 web/        the desktop/browser app: Vite + React + PixiJS. No backend.
 android/    the phone app: a Capacitor shell around web/dist, built in Docker

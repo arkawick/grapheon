@@ -43,6 +43,11 @@ const RELATION_WEIGHT = {
   indirect_call: 0.4,  // resolved through a variable; a guess by nature
   imports_from: 0.35,
   imports: 0.35,
+  // A TypeScript `import type` vanishes from the emitted JavaScript. It is a
+  // genuine dependency for a reader and none at all at runtime, so it pulls
+  // less than a real import — otherwise a types-only barrel file lays out as
+  // the hub of the whole application.
+  imports_type: 0.18,
 };
 const DEFAULT_RELATION_WEIGHT = 0.5;
 

@@ -20,22 +20,33 @@ import { build } from '../../../pipeline/layout.js';
 import engineWasm from 'web-tree-sitter/web-tree-sitter.wasm?url';
 import pythonWasm from '@vscode/tree-sitter-wasm/wasm/tree-sitter-python.wasm?url';
 import javascriptWasm from '@vscode/tree-sitter-wasm/wasm/tree-sitter-javascript.wasm?url';
+import typescriptWasm from '@vscode/tree-sitter-wasm/wasm/tree-sitter-typescript.wasm?url';
+import tsxWasm from '@vscode/tree-sitter-wasm/wasm/tree-sitter-tsx.wasm?url';
 
 const progress = (stage, detail = '') => postMessage({ type: 'progress', stage, detail });
 
 let ready = null;
 async function init() {
   await Parser.init({ locateFile: () => engineWasm });
-  const py = await Language.load(pythonWasm);
-  const js = await Language.load(javascriptWasm);
-  const mk = (language) => {
+  const mk = async (wasm) => {
+    const language = await Language.load(wasm);
     const parser = new Parser();
     parser.setLanguage(language);
     return { language, parser };
   };
-  const pyLang = mk(py);
-  const jsLang = mk(js);
-  return { '.py': pyLang, '.js': jsLang, '.jsx': jsLang };
+  const pyLang = await mk(pythonWasm);
+  const jsLang = await mk(javascriptWasm);
+  // .tsx needs the TSX grammar specifically: the plain TypeScript grammar
+  // reads `<T>(x)` as a type assertion, so every JSX element in a .tsx file
+  // becomes a parse error and the file yields almost nothing.
+  const tsLang = await mk(typescriptWasm);
+  const tsxLang = await mk(tsxWasm);
+  return {
+    '.py': pyLang,
+    '.js': jsLang, '.jsx': jsLang,
+    '.ts': tsLang, '.mts': tsLang, '.cts': tsLang,
+    '.tsx': tsxLang,
+  };
 }
 
 onmessage = async (e) => {

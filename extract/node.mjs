@@ -23,7 +23,18 @@ const WASM = dirname(require.resolve('@vscode/tree-sitter-wasm/wasm/tree-sitter-
 // one-line bundles) into android/app/src/main/assets, and parsing those
 // stalls the extractor — the same trap that bit the Playwright drive.
 const SKIP = new Set(['.git', 'node_modules', 'graphify-out', '__pycache__', 'dist', '.venv', 'venv', 'android']);
-const EXTS = { '.py': 'tree-sitter-python.wasm', '.js': 'tree-sitter-javascript.wasm', '.jsx': 'tree-sitter-javascript.wasm' };
+// .tsx needs the TSX grammar specifically: the plain TypeScript grammar parses
+// `<T>(x)` as a type assertion, so every JSX element in a .tsx file becomes a
+// parse error and the file yields almost nothing.
+const EXTS = {
+  '.py': 'tree-sitter-python.wasm',
+  '.js': 'tree-sitter-javascript.wasm',
+  '.jsx': 'tree-sitter-javascript.wasm',
+  '.ts': 'tree-sitter-typescript.wasm',
+  '.mts': 'tree-sitter-typescript.wasm',
+  '.cts': 'tree-sitter-typescript.wasm',
+  '.tsx': 'tree-sitter-tsx.wasm',
+};
 
 const root = process.argv[2];
 if (!root) { console.error('usage: node extract/node.mjs <repoDir> [--out file]'); process.exit(1); }

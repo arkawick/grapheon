@@ -133,17 +133,79 @@ export function extractCorpus(files, langs) {
     return null;
   };
 
-  /** js "./Sidebar" relative to importer -> {id, synthetic}. */
+  // Suffix index over JS/TS files, for resolving non-relative specifiers.
+  // Path ALIASES ("@/lib/utils") and baseUrl imports ("components/ui/card")
+  // are the norm in TypeScript projects, and treating them as npm packages
+  // left a real repo with 5 of 138 imports resolved — a graph of disconnected
+  // dots. This is what reconnects it.
+  const jsBySuffix = new Map();
+  for (const f of files) {
+    if (!/\.(m|c)?[jt]sx?$/.test(f.path)) continue;
+    let noExt = stripExt(f.path);
+    // "a/b/index.ts" is also importable as "a/b".
+    const forms = noExt.endsWith('/index') ? [noExt, noExt.slice(0, -6)] : [noExt];
+    for (const form of forms) {
+      const parts = form.split('/');
+      for (let i = 0; i < parts.length; i++) {
+        const suffix = parts.slice(i).join('/');
+        if (!jsBySuffix.has(suffix)) jsBySuffix.set(suffix, new Set());
+        jsBySuffix.get(suffix).add(sanitise(noExt));
+      }
+    }
+  }
+
+  /**
+   * Non-relative specifier -> internal file, when it is unambiguous.
+   *
+   * Only for things that can plausibly BE internal: an alias prefix, or a
+   * multi-segment path. A bare single segment ("react", "axios") is never
+   * suffix-matched, or a local `utils.ts` would swallow the npm package of
+   * the same name.
+   */
+  const resolveAlias = (spec) => {
+    let rest = spec;
+    const alias = /^(@|~|#)\//.exec(spec);
+    if (alias) rest = spec.slice(2);
+    else if (spec.startsWith('@') || !spec.includes('/')) return null; // @scope/pkg, or bare
+    rest = rest.replace(/\.(m|c)?[jt]sx?$/, '');
+    const hit = jsBySuffix.get(rest);
+    // Ambiguous matches are left unresolved: a wrong edge is worse than none.
+    return hit && hit.size === 1 ? [...hit][0] : null;
+  };
+
+  /** js/ts "./Sidebar" relative to importer -> {id, internal}. */
   const resolveJsModule = (spec, importerPath) => {
-    if (!spec.startsWith('.')) return null;
+    if (!spec.startsWith('.')) {
+      const aliased = resolveAlias(spec);
+      return aliased ? { id: aliased, internal: true } : null;
+    }
     const base = importerPath.split('/').slice(0, -1);
     for (const seg of spec.split('/')) {
       if (seg === '.' || seg === '') continue;
       else if (seg === '..') base.pop();
       else base.push(seg);
     }
-    const stem = base.join('/');
-    for (const cand of [stem, `${stem}.js`, `${stem}.jsx`, `${stem}/index.js`, `${stem}/index.jsx`]) {
+    let stem = base.join('/');
+
+    // TypeScript's NodeNext resolution has you write `./foo.js` for a file that
+    // is actually `foo.ts` — the specifier names the COMPILED output. Without
+    // stripping that, every ESM-style TS import resolves to nothing.
+    const tsCandidates = [];
+    const jsLike = /\.(js|jsx|mjs|cjs)$/.exec(stem);
+    if (jsLike) {
+      const noExt = stem.slice(0, -jsLike[0].length);
+      tsCandidates.push(`${noExt}.ts`, `${noExt}.tsx`, `${noExt}.mts`, `${noExt}.cts`);
+    }
+
+    const candidates = [
+      stem,
+      ...tsCandidates,
+      `${stem}.ts`, `${stem}.tsx`, `${stem}.mts`, `${stem}.cts`,
+      `${stem}.js`, `${stem}.jsx`, `${stem}.mjs`, `${stem}.cjs`,
+      `${stem}/index.ts`, `${stem}/index.tsx`,
+      `${stem}/index.js`, `${stem}/index.jsx`,
+    ];
+    for (const cand of candidates) {
       if (byPath.has(cand)) return { id: byPath.get(cand), internal: true };
     }
     for (const [p, id] of byPath) if (stripExt(p) === stem) return { id, internal: true };
@@ -173,6 +235,8 @@ export function extractCorpus(files, langs) {
     } finally {
       tree.delete();
     }
+    // eslint-disable-next-line no-unused-expressions
+    void ext;
   }
 
   // Deferred edges: only those whose target turned out to be a real entity.
@@ -476,10 +540,50 @@ export function extractCorpus(files, langs) {
       if (stmt.type === 'export_statement') {
         stmt = stmt.namedChildren.find((c) => c.type !== 'export_clause') ?? stmt;
       }
+      // --- TypeScript-only declarations ------------------------------------
+      // Types are as much a part of a TS codebase's structure as its
+      // functions: an interface is what a module agrees to, and leaving them
+      // out gives a map of half the repo.
+      if (stmt.type === 'interface_declaration' || stmt.type === 'type_alias_declaration') {
+        const name = text(stmt.childForFieldName('name'));
+        const tid = declare(name, child, name);
+        // `interface A extends B` is the same relationship as class extends.
+        const heritage = stmt.namedChildren.find((c) => c.type === 'extends_type_clause');
+        for (const b of heritage?.namedChildren ?? []) {
+          const bname = b.type === 'type_identifier' ? text(b)
+            : b.type === 'generic_type' ? text(b.childForFieldName('name') ?? b).split('<')[0]
+            : null;
+          if (bname) addLink(tid, localEntities.get(bname) ?? sanitise(bname), 'inherits', file, line(b));
+        }
+        // Members of an interface are its shape, mirroring class methods.
+        for (const m of stmt.childForFieldName('body')?.namedChildren ?? []) {
+          if (m.type !== 'method_signature' && m.type !== 'property_signature') continue;
+          const mname = m.childForFieldName('name');
+          if (!mname) continue;
+          const mid = sanitise(`${tid}_${text(mname)}`);
+          addNode({
+            id: mid, label: `.${text(mname)}`, file_type: 'code',
+            source_file: file, source_location: `L${line(m)}`,
+          });
+          addLink(tid, mid, 'method', file, line(m));
+        }
+        continue;
+      }
+      if (stmt.type === 'enum_declaration') {
+        declare(text(stmt.childForFieldName('name')), child, text(stmt.childForFieldName('name')));
+        continue;
+      }
+      // `declare function f(): void` — a signature with no body, but still the
+      // module's public surface.
+      if (stmt.type === 'function_signature') {
+        declare(text(stmt.childForFieldName('name')), child);
+        continue;
+      }
+
       if (stmt.type === 'function_declaration' || stmt.type === 'generator_function_declaration') {
         const name = text(stmt.childForFieldName('name'));
         bodies.push([declare(name, child), stmt]);
-      } else if (stmt.type === 'class_declaration') {
+      } else if (stmt.type === 'class_declaration' || stmt.type === 'abstract_class_declaration') {
         const name = text(stmt.childForFieldName('name'));
         const cid = declare(name, child, name);
         const heritage = stmt.namedChildren.find((c) => c.type === 'class_heritage');
@@ -525,14 +629,26 @@ export function extractCorpus(files, langs) {
       const spec = text(srcNode).slice(1, -1);
       const resolved = resolveJsModule(spec, file);
       const moduleTarget = resolved ? resolved.id : `ref_${sanitise(spec)}`;
-      addLink(fileId, moduleTarget, 'imports_from', file, line(child), { context: 'import' });
+
+      // `import type { X }` is a COMPILE-TIME dependency: it disappears
+      // entirely from the emitted JavaScript. It still matters for
+      // understanding the code, so it is a real edge — but it must not carry
+      // the same weight as a runtime import, or a types-only barrel file
+      // looks like the hub of the application.
+      const typeOnly = /^\s*import\s+type\b/.test(text(child));
+      const rel = typeOnly ? 'imports_type' : 'imports_from';
+      addLink(fileId, moduleTarget, rel, file, line(child), { context: 'import' });
       if (resolved?.internal) {
         // each imported binding also links to the entity inside that file
         visit(child, (n) => {
           if (n.type === 'import_specifier') {
             const nm = text(n.childForFieldName('name'));
-            importedJs.set(nm, resolved.id);
-            addLink(fileId, sanitise(`${resolved.id}_${nm}`), 'imports', file, line(child), { context: 'import' });
+            // A per-specifier `type` marker (`import { type A, b }`) is the
+            // same compile-time-only story as a whole type-only import.
+            const specTypeOnly = typeOnly || /^\s*type\s/.test(text(n));
+            if (!specTypeOnly) importedJs.set(nm, resolved.id);
+            addLink(fileId, sanitise(`${resolved.id}_${nm}`),
+              specTypeOnly ? 'imports_type' : 'imports', file, line(child), { context: 'import' });
           } else if (n.type === 'import_clause') {
             const def = n.namedChildren.find((c) => c.type === 'identifier');
             if (def) {
