@@ -55,6 +55,32 @@ const wrap = (req) => new Promise((res, rej) => {
   req.onerror = () => rej(req.error);
 });
 
+// Versions kept per corpus name. Diffing needs at least two builds of the same
+// repo to exist at once — the store used to key on the name alone, so
+// re-extracting silently replaced the only copy you could have compared with.
+const MAX_VERSIONS_PER_NAME = 3;
+
+/**
+ * Content fingerprint of a build.
+ *
+ * Cheap and order-independent: two extractions of an unchanged repo must
+ * produce the same value, or every rebuild would look like a new version and
+ * the store would fill with identical entries.
+ */
+function signature(entry) {
+  let h = 0x811c9dc5;
+  const mix = (s) => {
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+  };
+  // Sorted so ordering differences between runs cannot change the hash.
+  for (const id of (entry.layout?.nodes ?? []).map((n) => n.id).sort()) mix(id);
+  mix(`|${entry.edges?.length ?? 0}`);
+  return (h >>> 0).toString(36);
+}
+
 /** Rough payload size, for the budget and for showing the user. */
 function estimateBytes(payload) {
   let n = 0;
@@ -71,14 +97,15 @@ function estimateBytes(payload) {
  */
 export async function saveCorpus(entry) {
   const db = await open();
-  const id = `${entry.kind}:${entry.name}`;
-  const bytes = estimateBytes(entry);
+  const version = signature(entry);
+  const id = `${entry.kind}:${entry.name}:${version}`;
   const meta = {
     id,
     name: entry.name,
     kind: entry.kind,
+    version,
     savedAt: Date.now(),
-    bytes,
+    bytes: estimateBytes(entry),
     nodes: entry.layout?.nodes?.length ?? 0,
     communities: entry.layout?.communities?.length ?? 0,
     files: Object.keys(entry.sources ?? {}).length,
@@ -87,8 +114,9 @@ export async function saveCorpus(entry) {
 
   {
     const { t, done } = tx(db, [META, DATA], 'readwrite');
-    // Same name overwrites rather than accumulating duplicates: re-extracting
-    // a repo means the newer build supersedes the older one.
+    // Identical content overwrites itself (same id), so re-extracting an
+    // unchanged repo refreshes the timestamp instead of hoarding duplicates.
+    // Changed content becomes a new version, which is what makes diff possible.
     t.objectStore(META).put(meta);
     t.objectStore(DATA).put(entry, id);
     await done;
@@ -107,9 +135,17 @@ async function evict(db) {
 
   const doomed = [];
   let total = 0;
+  const perName = new Map();
   all.forEach((m, i) => {
     total += m.bytes;
-    if (i >= MAX_ENTRIES || total > MAX_TOTAL_BYTES) doomed.push(m.id);
+    // Old versions of one corpus go before other corpora do — keeping ten
+    // builds of one repo while evicting a different project is not what
+    // anyone means by a history.
+    const seen = (perName.get(m.name) ?? 0) + 1;
+    perName.set(m.name, seen);
+    if (seen > MAX_VERSIONS_PER_NAME || i >= MAX_ENTRIES || total > MAX_TOTAL_BYTES) {
+      doomed.push(m.id);
+    }
   });
   if (!doomed.length) return;
 

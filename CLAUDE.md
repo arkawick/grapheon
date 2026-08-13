@@ -364,7 +364,14 @@ one outright.
   BM25 index's Maps as-is. JSON would be lossy and slow.
 - **Two object stores.** `meta` is tiny and is what the page lists; `data`
   holds payloads. Listing must never deserialise every corpus to show names.
-- **Bounded** to 8 entries / 120 MB, oldest evicted. Unbounded, it eventually
+- **Entries are VERSIONED** (`kind:name:contentHash`). They used to key on the
+  name alone, so re-extracting silently replaced the only copy you could have
+  compared against — diff was impossible by construction. The hash is over
+  sorted node ids + edge count, so an unchanged repo re-saves in place rather
+  than creating a duplicate version.
+- **Old versions of one corpus evict before other corpora do** — keeping ten
+  builds of one repo while dropping a different project is not a history.
+- **Bounded** to 8 entries / 120 MB (and 3 versions per name), oldest evicted. Unbounded, it eventually
   hits the browser quota and fails at WRITE time — after the user has waited
   through a build.
 - **Saving must never fail a build.** The corpus is loaded and usable whether
@@ -374,6 +381,19 @@ one outright.
   the outgoing corpus and would point at nodes the new layout does not have.
 - Recent queries are per-corpus in localStorage, written on a 1.2s pause, not
   per keystroke (otherwise the list fills with prefixes of one question).
+
+## Corpus diff (lib/diff.js)
+
+Two builds of one corpus -> what changed. The headline is **drift**: a new
+dependency crossing a subsystem boundary, which a `git diff` cannot show
+because it is one import line among hundreds.
+- **Structural edges are excluded** (`contains`/`method`): a file gaining a
+  function is not a new dependency, and counting it buries the real ones.
+- **Edges from NEW entities are not drift.** A new file must connect to
+  something; drift is old code reaching somewhere new. Without this filter
+  every added file reads as an architecture violation.
+- **Community ids are recomputed per build and mean nothing across two** —
+  compare through the labels, never the numeric `c`.
 
 ## Knowledge base (lib/knowledge/)
 

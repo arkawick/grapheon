@@ -315,11 +315,45 @@ await page.click('.code-head .close');
 // it). Restoring must bring the first back WITH its sources, not just its map.
 await page.click('.nav a[href="#/history"]');
 await page.waitForSelector('.hist-item', { timeout: 10000 });
-const saved = await page.$$eval('.hist-item', (els) => els.map((el) => ({
-  kind: el.querySelector('.hist-kind')?.textContent,
-  name: el.querySelector('.hist-name')?.textContent,
-  current: !!el.querySelector('.hist-current'),
+// Entries are grouped by corpus now, with the version hash on the row — so
+// the NAME lives on the group heading.
+const saved = await page.$$eval('.hist-group', (gs) => gs.map((g) => ({
+  name: g.querySelector('h3')?.textContent.replace(/\s+/g, ' ').trim(),
+  versions: g.querySelectorAll('.hist-item').length,
 })));
+// Diff needs two builds of ONE corpus. Rebuild grapheon-self with a file
+// removed: same name, different content, so history keeps both as versions.
+await page.evaluate(({ files }) => window.__loadRepoFiles(files.slice(0, -1), 'grapheon-self'), { files: repoFiles });
+await page.waitForFunction(
+  () => document.querySelector('.corpus')?.textContent === 'grapheon-self', { timeout: 60000 });
+await page.waitForTimeout(600);
+await page.click('.nav a[href="#/history"]');
+await page.waitForSelector('.hist-item', { timeout: 10000 });
+const versionsOfSelf = await page.$$eval('.hist-group', (gs) => {
+  const g = gs.find((x) => x.querySelector('h3')?.textContent.includes('grapheon-self'));
+  return g ? g.querySelectorAll('.hist-item').length : 0;
+});
+let diffSummary = 'not run';
+if (versionsOfSelf >= 2) {
+  const btns = await page.$$('.hist-group:has(h3:text-matches("grapheon-self")) .hist-actions button:nth-child(2)');
+  const pick = btns.length >= 2 ? btns : await page.$$('.hist-actions button:nth-child(2)');
+  await pick[0].click();
+  await pick[1].click();
+  await page.waitForTimeout(200);
+  await page.click('.history .view-code');
+  await page.waitForSelector('.diff-tally', { timeout: 15000 });
+  await page.waitForTimeout(300);
+  diffSummary = await page.evaluate(() => {
+    const t = document.querySelector('.diff-tally')?.textContent.replace(/\s+/g, ' ').trim();
+    const drift = document.querySelectorAll('.drift-row').length;
+    const removed = [...document.querySelectorAll('.ring h3')]
+      .find((h) => h.textContent.includes('Files removed'))?.textContent.replace(/\s+/g, ' ').trim();
+    return `${t}; ${drift} drift; ${removed ?? 'no files removed'}`;
+  });
+  await page.click('.chip.add'); // back to history
+  await page.waitForTimeout(300);
+}
+
 const restoreStart = Date.now();
 await page.click('.hist-item:not(.active) .hist-actions button');
 await page.waitForFunction(
@@ -451,7 +485,8 @@ console.log(`dividers   : ${resize.count} handles; drag -140px took code ${resiz
 console.log(`search     : ${searchFoot} in ${searchMs}ms (cold); hit jumped to ${jumped.path} line ${jumped.target}`);
 console.log(`tabs       : [${tabsInfo.open.join(', ')}] active=${tabsInfo.active}`);
 console.log(`knowledge  : ${kb.stats}; ${kb.nodes}; ${kb.hits} hits, ${kb.marks} highlights, top="${kb.top}" -> ${kb.opened}`);
-console.log(`history    : ${saved.length} saved [${saved.map((s) => `${s.kind}:${s.name}`).join(', ')}]; restored in ${restoreMs}ms with sources intact (${restoredSource.path}, ${restoredSource.lines} lines)`);
+console.log(`history    : ${saved.map((s) => s.name).join(' | ')}; restored in ${restoreMs}ms with sources intact (${restoredSource.path}, ${restoredSource.lines} lines)`);
+console.log(`diff       : ${versionsOfSelf} versions of grapheon-self; ${diffSummary}`);
 console.log(`pdf        : ${pdfHit ? `indexed, hit "${pdfHit.heading}" at ${pdfHit.source}` : 'NO HIT — pdf text did not reach the index'}`
   + ` (parsed with Uint8Array.toHex removed${hadToHex ? '' : '; runtime lacked it anyway'})`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);

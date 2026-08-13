@@ -186,6 +186,23 @@ is now saved to IndexedDB, and **History** lists them for instant restore
 (measured: **261 ms**, versus seconds of re-extraction), with sources, edges
 and the knowledge index all intact.
 
+Builds are **versioned**: re-extracting a changed repo keeps the previous
+build rather than overwriting it (identical content refreshes in place instead
+of hoarding duplicates). Up to 3 versions per corpus, and old versions of one
+corpus are evicted before other corpora are.
+
+**Compare** any two builds to see what changed:
+
+- entities and dependencies added/removed
+- files added/removed
+- **new cross-subsystem dependencies** — the headline. A module reaching into
+  a part of the system it previously had nothing to do with is architecture
+  drift, and it's invisible in a normal `git diff`: one import line among
+  hundreds. Edges from brand-new files are excluded — a new file has to
+  connect to something; drift is *old* code reaching somewhere new.
+
+Diffs export as markdown too.
+
 Stored on the device only. Bounded to 8 corpora / 120 MB, oldest evicted
 first — they're large and always regenerable, and an unbounded cache would
 eventually fail at write time, which is the worst moment to find out.

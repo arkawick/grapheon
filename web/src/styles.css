@@ -862,3 +862,29 @@ body.resizing * { cursor: col-resize !important; }
   font: inherit; font-size: 11.5px;
 }
 .chip.add:hover { background: rgba(125, 211, 252, 0.1); }
+
+/* --- history versions + diff ------------------------------------------------ */
+.hist-group { margin-bottom: 14px; }
+.hist-group h3 {
+  margin: 0 0 6px; font-size: 10px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--dim);
+}
+.hist-item.picked { border-color: var(--accent); background: rgba(125, 211, 252, 0.07); }
+
+.diff-tally {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px;
+  margin: 10px 0; font-size: 13px;
+}
+.diff-tally .add { color: #86efac; font-weight: 600; }
+.diff-tally .rem { color: #fca5a5; font-weight: 600; }
+.diff-tally .dim { font-size: 11px; margin-right: 8px; }
+
+.drift-row {
+  padding: 5px 7px; margin-bottom: 4px; border-radius: 6px;
+  background: rgba(253, 224, 71, 0.07);
+  border-left: 2px solid rgba(253, 224, 71, 0.5);
+  font-size: 11.5px; word-break: break-all;
+}
+.drift-row .dim { font-size: 10.5px; }
+.mono.add { color: #86efac; }
+.mono.rem { color: #fca5a5; }
