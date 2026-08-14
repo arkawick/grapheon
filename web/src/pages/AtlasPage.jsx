@@ -8,7 +8,7 @@ export default function AtlasPage() {
   const {
     layout, adjacency, ensureAdjacency, nodeById,
     selected, setSelected, focus, highlight, setKindFilter,
-    sources, codeOpen, setCodeOpen,
+    sources, codeOpen, setCodeOpen, linked, openFile,
   } = useGraph();
 
   const [hidden, setHidden] = useState(() => new Set());
@@ -71,6 +71,13 @@ export default function AtlasPage() {
           canViewCode={!!sources?.has(selected.a?.path)}
           codeOpen={codeOpen}
           onToggleCode={() => setCodeOpen((o) => !o)}
+          mentions={linked?.join?.byNode?.get(selected.id) ?? []}
+          onOpenMention={(m) => {
+            // The passage lives in the LINKED document corpus, whose text this
+            // corpus's sources do not contain — so open by document path.
+            const path = String(m.sectionId).split('#')[0];
+            openFile(path, m.line);
+          }}
           onClose={() => setSelected(null)}
           onPick={(id) => {
             const n = nodeById.get(id);

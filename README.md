@@ -245,6 +245,25 @@ LLM. You get ranked evidence with its source, which for a base you're trying
 to trust is the more useful half. PDF support and optional on-device
 embeddings are the natural next steps.
 
+## Linking code and documents
+
+The two corpora describe the same system. **Link** in History holds a second
+corpus alongside the active one and finds where prose names real code:
+
+- a code entity's panel shows **Documented in** — the passages that discuss it
+- a Knowledge result shows the **code it mentions**, clickable straight to the
+  source
+
+No model. Matching is deliberately conservative, because a join that links
+every "get" and "data" is worse than none: generic identifiers are refused
+outright, undistinctive ones only count inside backticks (an explicit "this is
+code" from the writer), a form shared by two entities is dropped rather than
+guessed, and a term appearing in a fifth of all passages is treated as
+vocabulary rather than a reference.
+
+On Aeon that gives 218 mentions — `Neo4jStore` correctly resolving to the one
+passage that discusses it, in "Hard-won gotchas".
+
 ## File explorer
 
 **Files** in the sidebar opens the repo as a directory tree beside the map.

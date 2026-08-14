@@ -9,6 +9,7 @@
 export default function DetailPanel({
   node, neighbours, communities, onClose, onPick,
   canViewCode = false, codeOpen = false, onToggleCode,
+  mentions = [], onOpenMention,
 }) {
   const community = communities.find((c) => c.id === node.c);
 
@@ -44,6 +45,27 @@ export default function DetailPanel({
         <button className="view-code" onClick={onToggleCode}>
           {codeOpen ? 'Hide code' : 'View code'}
         </button>
+      )}
+
+      {/* Prose that talks about this code. The two corpora describe the same
+          system, and this is the only place they meet. */}
+      {mentions.length > 0 && (
+        <section className="rel-group mentions">
+          <h3>Documented in <span className="dim">{mentions.length}</span></h3>
+          {mentions.slice(0, 8).map((m, i) => (
+            <button key={i} className="mention" onClick={() => onOpenMention?.(m)}>
+              <div className="mention-head">
+                <span className="mention-where">{m.heading || 'untitled section'}</span>
+                <span className={`tag ${m.confidence === 'high' ? 'extracted' : 'inferred'}`}>
+                  {m.confidence}
+                </span>
+              </div>
+              <div className="mention-text dim">
+                {m.text.length > 150 ? `${m.text.slice(0, 150)}…` : m.text}
+              </div>
+            </button>
+          ))}
+        </section>
       )}
 
       {relations.length === 0 && (

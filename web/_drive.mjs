@@ -354,6 +354,21 @@ if (versionsOfSelf >= 2) {
   await page.waitForTimeout(300);
 }
 
+// Link the docs corpus to the code one and check a mention lands. The two
+// corpora describe the same system; this is the only place they meet.
+let joinSummary = 'not run';
+{
+  const linkBtns = await page.$$('.hist-actions button:text-is("Link")');
+  if (linkBtns.length) {
+    await linkBtns[0].click();
+    await page.waitForTimeout(1500);
+    joinSummary = await page.evaluate(() =>
+      document.querySelector('.linked-note')?.textContent.replace(/\s+/g, ' ').trim()
+      ?? document.querySelector('.caveat')?.textContent.replace(/\s+/g, ' ').trim()
+      ?? 'no note rendered');
+  }
+}
+
 const restoreStart = Date.now();
 await page.click('.hist-item:not(.active) .hist-actions button');
 await page.waitForFunction(
@@ -487,6 +502,7 @@ console.log(`tabs       : [${tabsInfo.open.join(', ')}] active=${tabsInfo.active
 console.log(`knowledge  : ${kb.stats}; ${kb.nodes}; ${kb.hits} hits, ${kb.marks} highlights, top="${kb.top}" -> ${kb.opened}`);
 console.log(`history    : ${saved.map((s) => s.name).join(' | ')}; restored in ${restoreMs}ms with sources intact (${restoredSource.path}, ${restoredSource.lines} lines)`);
 console.log(`diff       : ${versionsOfSelf} versions of grapheon-self; ${diffSummary}`);
+console.log(`join       : ${joinSummary}`);
 console.log(`pdf        : ${pdfHit ? `indexed, hit "${pdfHit.heading}" at ${pdfHit.source}` : 'NO HIT — pdf text did not reach the index'}`
   + ` (parsed with Uint8Array.toHex removed${hadToHex ? '' : '; runtime lacked it anyway'})`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);

@@ -22,7 +22,16 @@ const WASM = dirname(require.resolve('@vscode/tree-sitter-wasm/wasm/tree-sitter-
 // `android` matters here too: cap sync copies the built dist (minified
 // one-line bundles) into android/app/src/main/assets, and parsing those
 // stalls the extractor — the same trap that bit the Playwright drive.
-const SKIP = new Set(['.git', 'node_modules', 'graphify-out', '__pycache__', 'dist', '.venv', 'venv', 'android']);
+// Must mirror web/src/lib/corpus.js — the CLI and the browser have to describe
+// the same corpus for the same repo. They drifted once: `.claude/worktrees`
+// holds whole COPIES of a repository, so the CLI silently ingested every class
+// twice, and the docs<->code join then refused to link `ChromaStore` because
+// two identical definitions made it ambiguous.
+const SKIP = new Set([
+  '.git', 'node_modules', 'graphify-out', '__pycache__', 'dist', '.venv', 'venv',
+  'android', 'build', 'target', '.gradle', '.next', 'coverage', 'out',
+  '.claude', '.idea', '.vscode', '.pytest_cache', '.mypy_cache', '.tox', '.cache',
+]);
 // .tsx needs the TSX grammar specifically: the plain TypeScript grammar parses
 // `<T>(x)` as a type assertion, so every JSX element in a .tsx file becomes a
 // parse error and the file yields almost nothing.

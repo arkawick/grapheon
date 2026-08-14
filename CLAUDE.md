@@ -382,6 +382,33 @@ one outright.
 - Recent queries are per-corpus in localStorage, written on a 1.2s pause, not
   per keystroke (otherwise the list fills with prefixes of one question).
 
+## Code ↔ docs join (lib/join.js)
+
+Links doc passages to the code entities they name. `linked` in App holds a
+SECOND corpus purely to cross-reference — it is never rendered, so the map
+stays one corpus. Surfaced in DetailPanel ("Documented in") and on Knowledge
+results.
+
+Precision is everything; a noisy join is worse than none. The rules:
+- generic identifiers (`get`, `data`, `config`…) are refused outright;
+- undistinctive names only match inside **backticks** — but they stay
+  candidates until the text is examined, because filtering them at build time
+  meant `` `complete()` `` could never match no matter how it was written;
+- **path forms come only from the FILE's own node.** Every function in llm.py
+  carries that path, so emitting it for all of them made the path ambiguous
+  against its own file and killed the strongest signal available;
+- a form shared by two entities is dropped, not guessed;
+- a term in >20% of passages is vocabulary, not a reference.
+
+**The CLI and browser skip lists must stay in step.** They drifted once:
+`extract/node.mjs` still walked `.claude/worktrees`, which holds whole COPIES
+of a repo, so every class existed twice and the join refused to link
+`ChromaStore` as ambiguous. The rule was right; the corpus was wrong.
+
+Also: when a join finds nothing, check the docs actually use that name before
+suspecting the matcher. Aeon's docs say "ChromaDB" 56 times and "ChromaStore"
+zero, so a zero there is correct.
+
 ## Corpus diff (lib/diff.js)
 
 Two builds of one corpus -> what changed. The headline is **drift**: a new

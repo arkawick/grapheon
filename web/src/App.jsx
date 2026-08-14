@@ -9,6 +9,7 @@ import KnowledgePage from './pages/KnowledgePage.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
 import InsightsPage from './pages/InsightsPage.jsx';
 import { saveCorpus, loadCorpus } from './lib/history.js';
+import { joinDocsToCode, passagesOf } from './lib/join.js';
 import CodePane from './CodePane.jsx';
 import FileTree from './FileTree.jsx';
 import SearchPanel from './SearchPanel.jsx';
@@ -77,6 +78,10 @@ export default function App() {
   // Its GRAPH goes through `corpus` like any other, so the Atlas, file tree and
   // code pane render it with no changes — a corpus is a corpus.
   const [knowledge, setKnowledge] = useState(null);
+  // A SECOND corpus held alongside the active one, purely to cross-reference
+  // against it: code loaded while you read docs, or docs while you read code.
+  // It is never rendered — only joined — so the map stays one corpus.
+  const [linked, setLinked] = useState(null);
   // Files opened from the TREE or SEARCH rather than from a graph node. Kept
   // separate from `selected` because most readable files (README, compose.yml)
   // have no node at all, and forcing them through the selection would mean
@@ -315,6 +320,37 @@ export default function App() {
     setBusy(null);
   }, []);
 
+  /**
+   * Hold a second corpus of the OTHER kind alongside this one, and compute the
+   * mentions between them. Code and docs describe the same system; until now
+   * the two corpora had no idea the other existed.
+   */
+  const linkCorpus = useCallback(async (id) => {
+    const other = await loadCorpus(id);
+    if (!other) throw new Error('That corpus is no longer stored.');
+    const isDocs = !!other.knowledge;
+    const codeNodes = isDocs ? corpus?.layout?.nodes : other.layout?.nodes;
+    const passages = isDocs ? passagesOf(other.knowledge) : passagesOf(knowledge);
+    if (!codeNodes?.length || !passages?.length) {
+      throw new Error('Linking needs one code corpus and one document corpus.');
+    }
+    const join = joinDocsToCode(codeNodes, passages);
+    setLinked({
+      id,
+      name: other.meta?.name ?? id.split(':')[1],
+      kind: isDocs ? 'knowledge' : 'code',
+      join,
+      // Only needed when the LINKED side is code: opening a mention means
+      // showing a file this corpus does not have.
+      sources: isDocs ? null : other.sources ?? null,
+      nodes: isDocs ? null : new Map((other.layout?.nodes ?? []).map((n) => [n.id, n])),
+    });
+    return join.total;
+  }, [corpus, knowledge]);
+
+  // A link is only meaningful for the corpus it was computed against.
+  useEffect(() => { setLinked(null); }, [corpus]);
+
   useEffect(() => () => workerRef.current?.terminate(), []);
 
   // Android back dismisses the top layer — code, then tree, then selection —
@@ -443,9 +479,11 @@ export default function App() {
     sources, codeOpen, setCodeOpen, treeOpen, setTreeOpen, openFile,
     searchOpen, setSearchOpen, menuOpen, setMenuOpen, narrow,
     knowledge, ingestDocuments, restoreCorpus, renderer: rendererRef,
+    linked, linkCorpus, unlinkCorpus: () => setLinked(null),
   }), [corpus, adjacency, ensureAdjacency, nodeById, nodeByPath, selected, focus, highlight,
        setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile,
-       searchOpen, menuOpen, narrow, knowledge, ingestDocuments, restoreCorpus]);
+       searchOpen, menuOpen, narrow, knowledge, ingestDocuments, restoreCorpus,
+       linked, linkCorpus]);
 
   const layout = corpus?.layout;
 

@@ -16,7 +16,7 @@ function ago(ts) {
 }
 
 export default function HistoryPage() {
-  const { restoreCorpus, corpusName, busy } = useGraph();
+  const { restoreCorpus, corpusName, busy, linked, linkCorpus, unlinkCorpus } = useGraph();
   const [items, setItems] = useState(null);
   const [error, setError] = useState(null);
   const [picked, setPicked] = useState([]);   // ids selected for comparison
@@ -79,6 +79,13 @@ export default function HistoryPage() {
       </p>
 
       {error && <p className="caveat">{error}</p>}
+
+      {linked && (
+        <p className="linked-note">
+          Linked to <strong>{linked.name}</strong> — {linked.join.total} mentions
+          connect it to the current corpus.
+        </p>
+      )}
       {!items && <p className="dim empty">Reading…</p>}
 
       {items?.length === 0 && (
@@ -126,6 +133,22 @@ export default function HistoryPage() {
                   <button className={sel ? '' : 'ghost'} onClick={() => toggle(it.id)}>
                     {sel ? 'Selected' : 'Compare'}
                   </button>
+                  {/* Linking joins a docs corpus to a code one without
+                      switching to it — the two describe the same system. */}
+                  {!active && (
+                    <button
+                      className="ghost"
+                      onClick={async () => {
+                        if (linked?.id === it.id) return unlinkCorpus();
+                        try {
+                          const n = await linkCorpus(it.id);
+                          if (!n) setError('No mentions found between those two corpora.');
+                        } catch (e) { setError(String(e.message ?? e)); }
+                      }}
+                    >
+                      {linked?.id === it.id ? 'Unlink' : 'Link'}
+                    </button>
+                  )}
                   <button className="ghost" onClick={async () => { await deleteCorpus(it.id); refresh(); }}>
                     Delete
                   </button>

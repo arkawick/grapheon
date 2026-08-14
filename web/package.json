@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "drive": "node _drive.mjs",
-    "test": "node --test src/lib/blast.test.js src/lib/corpus.test.js src/lib/diff.test.js src/lib/insights.test.js src/lib/knowledge/knowledge.test.js"
+    "test": "node --test src/lib/blast.test.js src/lib/corpus.test.js src/lib/diff.test.js src/lib/insights.test.js src/lib/join.test.js src/lib/knowledge/knowledge.test.js"
   },
   "dependencies": {
     "@vscode/tree-sitter-wasm": "^0.3.1",

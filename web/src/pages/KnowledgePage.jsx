@@ -11,7 +11,7 @@ import { recentQueries, rememberQuery } from '../lib/history.js';
  * source beats being told a summary you then have to go and verify.
  */
 export default function KnowledgePage() {
-  const { knowledge, nodeById, focus, openFile, layout, corpusName } = useGraph();
+  const { knowledge, nodeById, focus, openFile, layout, corpusName, linked } = useGraph();
   const [query, setQuery] = useState('');
   const [recent, setRecent] = useState(() => recentQueries(corpusName));
 
@@ -107,6 +107,23 @@ export default function KnowledgePage() {
             {r.passage.sectionId.split('#')[0]}:{r.passage.line}
           </div>
           <p className="kb-text">{highlight(r.passage.text, r.terms)}</p>
+
+          {/* Code this passage is talking about. Clicking stops the search
+              being a dead end: prose names a thing, and the thing exists. */}
+          {(linked?.join?.byPassage?.get(r.passage.id)?.hits ?? []).map((h, j) => (
+            <button
+              key={j}
+              className="kb-code-link"
+              onClick={(e) => {
+                e.stopPropagation();
+                const n = linked.nodes?.get(h.nodeId);
+                if (n?.a?.path) openFile(n.a.path, Number(/L(\d+)/.exec(n.a.loc ?? '')?.[1]) || null);
+              }}
+            >
+              <span className="mono">{h.text}</span>
+              <span className="dim"> in code</span>
+            </button>
+          ))}
         </article>
       ))}
 
