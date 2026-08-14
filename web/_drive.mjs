@@ -64,6 +64,17 @@ if (failed) {
 await page.waitForTimeout(600);
 await page.screenshot({ path: 'atlas-resting.png' });
 
+// The legend collapses on desktop too, not just on phones. It starts open
+// here (no stored preference in a fresh context) and the pill replaces it.
+await page.click('.legend-head button');
+await page.waitForTimeout(250);
+const legendCollapsed = await page.evaluate(() => ({
+  panel: !!document.querySelector('.legend'),
+  pill: !!document.querySelector('.legend-toggle'),
+}));
+await page.click('.legend-toggle');
+await page.waitForSelector('.legend .communities', { timeout: 5000 });
+
 // Click the biggest subsystem in the legend: exercises focus(), the lazy edge
 // fetch, adjacency building, and the detail panel in one gesture.
 await page.click('.communities button');
@@ -485,6 +496,7 @@ await mob.close();
 await browser.close();
 
 console.log(`sidebar    : ${status.replace(/\s+/g, ' ').trim()}`);
+console.log(`legend     : collapses on desktop (panel=${legendCollapsed.panel} pill=${legendCollapsed.pill}), reopens`);
 console.log(`selected   : ${selected}`);
 console.log(`connections: ${connections}`);
 console.log(`insights   : ${insights.tabs.join(' | ')}; top hub ${insights.topHub}; ${insights.excluded} entry points excluded from "unused"; exported ${insights.report}`);

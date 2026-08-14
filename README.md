@@ -341,6 +341,10 @@ npm run build:graph -- --name aeon
 subsystem from the legend, click any node to spotlight its neighbourhood and
 list its relations, each tagged EXTRACTED or INFERRED.
 
+The legend **collapses to a pill** on any screen, and the choice is
+remembered. It defaults open on a desktop, where it is useful context, and
+closed on a phone, where it would cover the whole map.
+
 **Blast Radius** — transitive impact, in both directions:
 
 - *Impact* — what breaks if this changes (follows edges pointing at the root)
