@@ -351,9 +351,36 @@ without a browser.
   held back. If that split ever collapses, check `ENTRY_VERBS` first.
 - **Tarjan is iterative on purpose** — the recursive form blows the stack on a
   real corpus, and a test pins it at 20k nodes.
-- **The map PNG uses Pixi's `extract` API**, which re-renders into a render
-  texture. Reading the canvas back directly returns a blank image with no
-  error — no `preserveDrawingBuffer` (same trap as the drive's screenshots).
+
+## Interactive map export (lib/exportHtml.js)
+
+`mapHtml()` returns one self-contained HTML file: slimmed node records, edges,
+and a plain 2D-canvas renderer, all inline. Replaced a PNG export — a static
+picture of a graph carries almost none of the graph's value.
+
+- **U+2028 and U+2029 must be written as escape sequences, never as literals.**
+  They are line terminators in JavaScript *source*, so a literal one inside a
+  regex ends the regex and the file will not parse — the failure is
+  `SyntaxError: Invalid regular expression: missing /`, which points nowhere
+  near the real cause. This bit this file during development. Editors and tools
+  that string-match will not find them either; patch such a line by rewriting it
+  programmatically. `exportHtml.test.js` asserts no raw ones reach the output.
+- **`<` is escaped in the embedded JSON** — a node labelled `</script>` would
+  otherwise close the data block regardless of what JSON thinks, and everything
+  after it becomes markup. Tested.
+- **Pixi is deliberately NOT inlined**: ~470 KB per exported file to draw
+  circles at positions already computed. Plain canvas keeps the export roughly
+  the size of its own data (0.31 MB for 1,038 nodes).
+- **Nodes get a minimum on-screen radius** (`1.6 / scale`). At overview zoom a
+  radius-3 dot is sub-pixel and the whole map reads as dust.
+- **Zoom translates toward the cursor** before scaling. Scaling around the
+  origin instead makes the point you are aiming at run away from you.
+- **The legend shows the top 24 subsystems but reports the true total** in the
+  footer — Aeon has 48, and the tail is single-digit clusters that would turn
+  the legend into a scrollbar.
+- **The drive opens the export from `file://` and fails on any non-`file:`
+  request.** "Self-contained" is a claim that has to be enforced, not asserted;
+  one CDN font would break every offline use without breaking any test.
 
 ## History (lib/history.js)
 

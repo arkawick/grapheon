@@ -176,7 +176,22 @@ points are detected from the graph itself (a `@router.get` decorator shows up
 as a reference to a file-scoped verb) and held back separately: **96 likely
 unused, 60 excluded as entry points or runtime hooks**.
 
-**Export report** writes it all as markdown; **Map as PNG** exports the Atlas.
+**Export report** writes it all as markdown.
+
+### Interactive map
+
+**Interactive map** writes the Atlas as a single self-contained HTML file —
+**0.31 MB** for Aeon's 1,038 nodes and 1,678 edges. Open it from `file://` on a
+machine that has never heard of Grapheon and you can still pan, zoom to the
+cursor, search, click a node to see its neighbours, and click a subsystem in the
+legend to isolate it. No server, no network, no dependencies: the drive treats
+any non-`file:` request from the exported page as a failure.
+
+This replaced a PNG export. A picture of a thousand dots is a picture of a
+thousand dots — the entire value of the map is being able to move around it. The
+renderer inside the export is a few hundred lines of plain 2D canvas rather than
+the app's PixiJS one, which would have added ~470 KB to every file to redraw
+circles whose positions are already computed.
 
 ## History
 

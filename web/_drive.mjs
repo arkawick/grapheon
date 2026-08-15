@@ -12,7 +12,8 @@
  */
 import { chromium } from 'playwright';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, extname, relative } from 'node:path';
+import { join, extname, relative, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const URL = process.env.GRAPHEON_URL || 'http://localhost:5180';
 const OUT = 'atlas.png';
@@ -132,6 +133,48 @@ const reportDl = page.waitForEvent('download', { timeout: 15000 });
 await page.click('.ins-actions button');
 insights.report = (await reportDl).suggestedFilename();
 await page.screenshot({ path: 'insights.png' });
+
+// --- interactive map export --------------------------------------------------
+// The export replaced a PNG, which was a picture of a thousand dots. The claim
+// it has to earn is "opens anywhere": so it is opened from file://, with every
+// non-file request treated as a failure, and driven like the real thing.
+const mapDl = page.waitForEvent('download', { timeout: 20000 });
+await page.click('.ins-actions .ghost');
+const mapFile = 'exported-map.html';
+await (await mapDl).saveAs(mapFile);
+const mapSize = (statSync(mapFile).size / 1e6).toFixed(2);
+
+const solo = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+const soloErrors = [];
+solo.on('pageerror', (e) => soloErrors.push(String(e).slice(0, 200)));
+solo.on('console', (m) => { if (m.type() === 'error') soloErrors.push(m.text().slice(0, 200)); });
+solo.on('request', (r) => {
+  if (!r.url().startsWith('file:')) soloErrors.push('EXTERNAL REQUEST ' + r.url());
+});
+await solo.goto(pathToFileURL(resolve(mapFile)).href);
+await solo.waitForTimeout(1200);
+const exported = await solo.evaluate(() => ({
+  title: document.title,
+  count: document.getElementById('count').textContent,
+  foot: document.getElementById('foot').textContent,
+  painted: document.getElementById('c').width > 0,
+  legend: document.querySelectorAll('#legend-body [data-c]').length,
+}));
+await solo.fill('#q', 'llm');
+await solo.waitForTimeout(350);
+exported.hits = await solo.$$eval('#hits button', (x) => x.length);
+await solo.click('#hits button');
+await solo.waitForTimeout(400);
+exported.selected = await solo.evaluate(() => document.querySelector('.side h2')?.textContent);
+// Zoom must move the view, or the whole reason this is not a PNG is gone.
+const beforeZoom = await solo.evaluate(() => document.getElementById('c').toDataURL().length);
+await solo.mouse.move(600, 400);
+await solo.mouse.wheel(0, -600);
+await solo.waitForTimeout(300);
+exported.zooms = beforeZoom !== await solo.evaluate(() => document.getElementById('c').toDataURL().length);
+await solo.screenshot({ path: 'exported-map.png' });
+await solo.close();
+errors.push(...soloErrors);
 
 // --- code viewer -------------------------------------------------------------
 // Search rather than clicking the map: a deterministic entity with real source.
@@ -518,7 +561,10 @@ console.log(`join       : ${joinSummary}`);
 console.log(`pdf        : ${pdfHit ? `indexed, hit "${pdfHit.heading}" at ${pdfHit.source}` : 'NO HIT — pdf text did not reach the index'}`
   + ` (parsed with Uint8Array.toHex removed${hadToHex ? '' : '; runtime lacked it anyway'})`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);
-console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, mobile-{atlas,detail,blast,code}.png`);
+console.log(`map export : ${mapSize} MB standalone; "${exported.title}", ${exported.count}, ${exported.legend} subsystems in legend`
+  + `; ${exported.foot}`);
+console.log(`  offline  : painted=${exported.painted} zooms=${exported.zooms} search=${exported.hits} hits -> ${exported.selected}`);
+console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, exported-map.png, mobile-{atlas,detail,blast,code}.png`);
 if (errors.length) {
   console.error(`\n${errors.length} console error(s):`);
   for (const e of errors.slice(0, 10)) console.error('  ' + e);

@@ -102,21 +102,3 @@ export function blastMarkdown(corpusName, roots, rings, direction, depth, nodeBy
   }
   return L.join('\n');
 }
-
-/**
- * The Atlas as a PNG.
- *
- * Uses Pixi's extract API, which re-renders into a render texture. Reading the
- * canvas back directly does NOT work — without `preserveDrawingBuffer` the
- * WebGL buffer is already cleared by the time you could sample it, and you get
- * a blank image with no error.
- */
-export async function mapPng(renderer) {
-  if (!renderer?.app || !renderer.viewport) throw new Error('The map is not ready.');
-  const canvas = renderer.app.renderer.extract.canvas(renderer.viewport);
-  const blob = await new Promise((res, rej) => {
-    if (canvas.convertToBlob) res(canvas.convertToBlob({ type: 'image/png' }));
-    else canvas.toBlob((b) => (b ? res(b) : rej(new Error('Could not read the map.'))), 'image/png');
-  });
-  return blob;
-}

@@ -473,6 +473,7 @@ export default function App() {
   const value = useMemo(() => ({
     layout: corpus?.layout ?? null,
     corpusName: corpus?.name ?? null,
+    edges: corpus?.edges ?? null,
     adjacency, ensureAdjacency, nodeById, nodeByPath,
     selected, setSelected, focus, highlight, setKindFilter,
     extractRepo, busy,

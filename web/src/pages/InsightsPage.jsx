@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useGraph } from '../GraphContext.js';
 import { computeInsights } from '../lib/insights.js';
-import { insightsMarkdown, download, mapPng } from '../lib/export.js';
+import { insightsMarkdown, download } from '../lib/export.js';
+import { mapHtml } from '../lib/exportHtml.js';
 
 /**
  * What the graph noticed without being asked.
@@ -11,7 +12,7 @@ import { insightsMarkdown, download, mapPng } from '../lib/export.js';
  * "what am I looking at".
  */
 export default function InsightsPage() {
-  const { layout, adjacency, ensureAdjacency, nodeById, focus, corpusName, renderer } = useGraph();
+  const { layout, adjacency, ensureAdjacency, nodeById, focus, corpusName, edges } = useGraph();
   const [adj, setAdj] = useState(adjacency);
   const [tab, setTab] = useState('hubs');
 
@@ -58,11 +59,14 @@ export default function InsightsPage() {
         <button onClick={() => download(
           `${corpusName}-report.md`, insightsMarkdown(corpusName, insights, layout)
         )}>Export report</button>
-        <button className="ghost" onClick={async () => {
-          try {
-            download(`${corpusName}-map.png`, await mapPng(renderer?.current), 'image/png');
-          } catch (e) { alert(e.message); }
-        }}>Map as PNG</button>
+        {/* An interactive file rather than a picture: a PNG of a graph is a
+            picture of a thousand dots, and the whole value of the map is
+            being able to move around it. */}
+        <button className="ghost" onClick={() => download(
+          `${corpusName}-map.html`,
+          mapHtml({ name: corpusName, layout, edges, source: layout?.meta?.source }),
+          'text/html'
+        )}>Interactive map</button>
       </div>
 
       <div className="seg ins-tabs">
