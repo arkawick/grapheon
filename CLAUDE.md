@@ -10,6 +10,21 @@ layout pass from Project-Kagami's Atlas, the feature vocabulary from Project-Aeo
 **The property worth protecting is that it runs on any repo with no infrastructure** —
 no backend, no database, no API key. Do not trade that away casually.
 
+## Docs
+
+Human-facing documentation lives in `docs/` — keep it in step when behaviour
+changes, and prefer sending users there over re-explaining in chat:
+
+- `docs/RUNNING-WEB.md` — every route to running the web app, all flags, troubleshooting
+- `docs/RUNNING-ANDROID.md` — build/sign/install/debug the APK, and the traps
+- `docs/ARCHITECTURE.md` — the three passes and the reasoning behind each decision
+- `docs/CONTRACT.md` — the two intermediate JSON shapes
+- `README.md` — overview, quickstart, feature tour, current state
+
+This file (CLAUDE.md) stays the agent-facing one: gotchas, invariants and the
+things that cost debugging time. It deliberately overlaps with docs/ — the
+audience differs.
+
 ## Stack & layout
 
 - **extract/** — the JS/WASM extraction port (web-tree-sitter). ESM, pure core,
@@ -41,7 +56,7 @@ node pipeline/collect-sources.js --name <n> --repo <path>   # sources for a grap
 npm run build:graph -- --name <name>       # adapt + Louvain + FA2 + sources
 npm run dev                                # http://localhost:5180
 
-npm test                                   # 77 unit tests across web/src/lib
+npm test                                   # 86 unit tests (77 web + 9 extract)
 npm run drive --workspace web              # Playwright: desktop + mobile pass
 npm run sync:android                       # web build + capacitor sync
 ./android/docker-build.sh                  # signed release APK, all in Docker
@@ -50,6 +65,9 @@ npm run sync:android                       # web build + capacitor sync
 The graphify CLI route (`graphify update <repo> --no-cluster`, copy
 graphify-out/graph.json into data/<name>/) still works and is the fidelity
 reference the JS extractor is scored against.
+
+Full guides with flags, failure modes and troubleshooting live in
+`docs/RUNNING-WEB.md` and `docs/RUNNING-ANDROID.md`.
 
 ## The three passes
 
@@ -163,10 +181,12 @@ neighbourhood spotlight), Blast Radius (both directions, depth 1–6, path-certa
 sidebar shell, **in-browser extraction** (folder pick on desktop, zip on mobile,
 Worker-based), **responsive phone UI** (top bar, bottom sheets, legend toggle —
 asserted by the drive's mobile pass at 390x844/touch), a **command palette** (⌘K over
-entities, files and commands, with per-corpus recent files), and a **debug APK**
-built and content-verified. Production build verified serving statically. **77
-unit tests**; the drive checks desktop + mobile + in-browser extraction, the
-standalone HTML export and the palette on every run.
+entities, files and commands, with per-corpus recent files), and a **signed
+release APK** built in Docker and verified (apksigner: CN=Grapheon, RSA 2048,
+v2 scheme; bundled assets confirmed to be the current build). Production build
+verified serving statically. **86 unit tests** (77 web + 9 extract); the drive
+checks desktop + mobile + in-browser extraction, the standalone HTML export and
+the palette on every run.
 
 ## JS extraction (extract/ + bench/)
 
@@ -626,7 +646,7 @@ recall number ever looks suspiciously perfect, check what TRUTH points at.
 
 ## Known gaps
 
-- **`CORPUS` is hardcoded to `'aeon'`** in `App.jsx`. Multi-corpus is the next feature;
+- **`DEFAULT_CORPUS` is hardcoded to `'aeon'`** in `App.jsx`. Multi-corpus is the next feature;
   the natural second is Kagami's *source* (a normal Python+JS codebase Graphify can
   extract directly) — **not** its AniList API, which needs Docker and a backend on :8100.
 - **The `contains` anomaly is uninvestigated**: 43 edges separate a file from functions

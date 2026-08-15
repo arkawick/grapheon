@@ -6,9 +6,66 @@ Point it at a codebase and get a navigable WebGL map of it: entities positioned
 by ForceAtlas2, coloured by Louvain community, with every relation tagged as
 read-from-source or inferred.
 
+**It runs on any repo with no infrastructure** — no backend, no database, no
+API key, no account. Parsing happens on your machine, in a Web Worker. The same
+build serves from nginx, from a static host, from `file://`, and inside an
+Android WebView, offline.
+
 Named for its two parents: **graph** + **aeon**. The extraction layer comes from
 [Graphify](https://github.com/Graphify-Labs/graphify); the renderer is ported
 from Project-Kagami's Atlas; the feature vocabulary comes from Project-Aeon.
+
+---
+
+## Documentation
+
+| Guide | What's in it |
+|---|---|
+| **[docs/RUNNING-WEB.md](docs/RUNNING-WEB.md)** | Running the web app: Docker, host, and no-install routes; loading your own code; every script explained; troubleshooting |
+| **[docs/RUNNING-ANDROID.md](docs/RUNNING-ANDROID.md)** | Building, signing, installing and debugging the Android app |
+| **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | How the three passes work and why each decision was made |
+| **[docs/CONTRACT.md](docs/CONTRACT.md)** | The two JSON shapes everything meets at |
+| **[bench/RESULTS.md](bench/RESULTS.md)** | Measured extractor fidelity behind the JS port |
+
+---
+
+## Quickstart
+
+**With Docker** — nothing to install but Docker:
+
+```bash
+docker compose up web     # production build  -> http://localhost:8090
+docker compose up dev     # vite + hot reload -> http://localhost:5180
+```
+
+**On the host** — Node 22+, no Python, no API key:
+
+```bash
+npm install
+npm run build:graph -- --name aeon    # regenerate layout artifacts
+npm run dev                           # http://localhost:5180
+```
+
+**Your own codebase** — either use the sidebar's **Open a repo…** (no CLI at
+all), or:
+
+```bash
+node extract/node.mjs ../some-repo --out data/somerepo/graph.json
+npm run build:graph -- --name somerepo
+npm run dev
+```
+
+**Android** — a signed APK with no Android toolchain on your machine:
+
+```bash
+./android/docker-build.sh
+# -> android/app/build/outputs/apk/release/app-release.apk
+```
+
+Full detail, flags and failure modes: [RUNNING-WEB.md](docs/RUNNING-WEB.md) and
+[RUNNING-ANDROID.md](docs/RUNNING-ANDROID.md).
+
+---
 
 ## Layout
 
@@ -22,7 +79,7 @@ docker/     Dockerfile + nginx.conf for the web app (see docker-compose.yml)
 scripts/    make-logo.mjs — every logo asset, generated from 86.svg
 bench/      the kill-test evidence (RESULTS.md) that justified the JS port
 data/       one directory per extracted corpus
-docs/       CONTRACT.md — the two JSON shapes everything meets at
+docs/       the guides above, plus CONTRACT.md
 ```
 
 Two independent Docker setups, on purpose: `docker/` builds and serves the web
@@ -33,65 +90,14 @@ Desktop and Android are deliberately separated: `web/` never references
 `android/`, and the only thing crossing the boundary is `web/dist`, copied in
 by `npx cap sync android` (config at the repo root, `capacitor.config.json`).
 
-## Run it
-
-### With Docker (nothing to install but Docker)
-
-```bash
-docker compose up web     # production build  -> http://localhost:8090
-docker compose up dev     # vite + hot reload -> http://localhost:5180
-```
-
-`web` is the honest deployment shape: a static build served by nginx, no
-backend, nothing to configure. Layout artifacts aren't committed, so the image
-regenerates them from the committed canonical graphs — a fresh clone works
-with no setup step. `dev` mounts the source for hot reload.
-
-Verified end to end against the container: the full Playwright drive passes
-through nginx, including in-browser WASM extraction (20 files → 101 nodes) and
-the mobile pass.
-
-Port 8090 rather than 8080 on purpose — on a WSL machine `wslrelay` can
-already own loopback:8080 for a distro-side service, and WSL's forwarding
-beats Docker's binding. The symptom is a bare 404 with *nothing* in nginx's
-log, which is a confusing hour if you don't know to look.
-
-### On the host
-
-```bash
-npm install
-
-# 1. extract — the JS/WASM extractor, no Python, no API key
-node extract/node.mjs ../some-repo --out data/somerepo/graph.json
-
-# 2. adapt + lay out
-npm run build:graph -- --name somerepo
-
-# 3. serve
-npm run dev            # http://localhost:5180
-```
-
-(The original Python route still works and produces the same shape:
-`graphify update <repo> --no-cluster`, then copy `graphify-out/graph.json`
-into `data/<name>/`. The JS extractor scores 97.7% link recall against it —
-`bench/RESULTS.md` has the full comparison.)
-
-Or skip the CLI entirely: `npm run dev`, then **Open a repo…** in the sidebar
-extracts in the browser.
-
-Verify it:
-
-```bash
-npm test                         # blast.js unit tests
-npm run drive --workspace web    # Playwright screenshot + console-error check
-```
+---
 
 ## How it fits together
 
 ```
-graphify update       AST parse, 36 languages, zero LLM
+extract (Node CLI | browser Worker | graphify CLI)
       |
-      v  graphify-out/graph.json
+      v  data/<name>/graph.json
 pipeline/adapters/    -> canonical graph      (swap this to swap extractor)
       |
       v  data/<name>/graph.canonical.json
@@ -101,19 +107,16 @@ pipeline/layout.js    Louvain -> seeded ForceAtlas2 -> world box
 web/                  PixiJS WebGL Atlas
 ```
 
-`docs/CONTRACT.md` specifies both intermediate files. Adding an extractor means
-writing one `adapt()` function and registering it — that seam is the whole
-design.
-
-## Why three passes
-
 Extraction is deterministic and slow-ish, layout is a batch physics job, and
-rendering must hold 60fps. Collapsing any two of them would force the expensive
-one to run at the frequency of the cheap one. The browser receives coordinates
-and never runs physics.
+rendering must hold 60fps. **Collapsing any two would force the expensive one
+to run at the frequency of the cheap one**, so the browser receives coordinates
+and never runs physics. It also means no backend: the app loads static JSON.
 
-It also means **no backend**: the app loads static JSON, so the whole thing
-deploys to any static host.
+Adding an extractor means writing one `adapt()` function and registering it —
+that seam is the whole design. [ARCHITECTURE.md](docs/ARCHITECTURE.md) explains
+the reasoning in full.
+
+---
 
 ## Zero-install: open a repo in the browser
 
@@ -132,53 +135,40 @@ drives the identical code path minus the picker.
 Code → Download ZIP feeds it directly). Zips are unpacked client-side with
 fflate; the same filters apply, plus a minified-file guard.
 
-## Android (Capacitor, built in Docker)
+---
 
-`android/` is a Capacitor shell around the same `web/dist`. The release build
-runs **inside Docker** — the image carries the whole toolchain (Node 22,
-Temurin JDK 21, Android SDK 36), so nothing Android-related needs installing
-on the host:
+## Pages
 
-```bash
-./android/docker-build.sh
-# -> android/app/build/outputs/apk/release/app-release.apk  (signed)
-```
+**Atlas** — the map. Search over labels and paths, filter by kind, jump to a
+subsystem from the legend, click any node to spotlight its neighbourhood and
+list its relations, each tagged EXTRACTED or INFERRED.
 
-The repo is volume-mounted into the container, which is what keeps the
-keystore out of image layers — signing material is never baked into anything
-that could be pushed. **Verified**: a 5.4 MB signed APK, one signer,
-`CN=Grapheon`, RSA 2048, APK Signature Scheme v2, with the bundled assets
-confirmed to be the current web build.
+The legend **collapses to a pill** on any screen, and the choice is
+remembered. It defaults open on a desktop, where it is useful context, and
+closed on a phone, where it would cover the whole map.
 
-Every workspace's `node_modules` is masked by a named Docker volume rather
-than shared with the host. That is a correctness measure, not a speed one: the
-host tree is Windows, so `/work/node_modules` holds `esbuild.exe` and friends,
-and `npm ci` inside a Linux container deletes node_modules before installing.
-Sharing it broke the build (`EIO: unlink`) *and* the host's own toolchain on
-the way. Named rather than anonymous volumes means the npm and Gradle caches
-survive between runs; `docker volume rm grapheon-android-*` forces a clean
-install. First build is ~12.5 minutes, most of it Gradle over the bind mount.
+**Blast Radius** — transitive impact, in both directions:
 
-**Signing** reads `android/keystore.properties` (gitignored) pointing at
-`android/keystore/` (gitignored). Without them, release builds come out
-unsigned rather than failing. **Back both files up somewhere safe** — losing
-the keystore means losing the app identity for updates.
+- *Impact* — what breaks if this changes (follows edges pointing at the root)
+- *Dependencies* — what you'd need to understand to change it
 
-Debug builds on the host still work if you have a JDK + SDK:
-`npm run sync:android && cd android && ./gradlew assembleDebug`.
+It takes a **change set**, not just one node — real changes touch several
+things at once, and asking about them together is not three separate
+questions: something two hops from each of three roots is two hops away, not
+six. Results export as a markdown report you can paste into a PR.
 
-The app is the static site verbatim — extraction runs in the WebView's
-worker, on-device, offline.
+Depth is adjustable 1–6, and results are grouped into rings by distance.
+**Certainty propagates along the path, not per edge** — one inferred hop
+anywhere upstream makes everything past it a maybe, and the panel says how many.
 
-## Insights
+This is the feature Graphify makes honest: Aeon computes the same idea from
+GitHub PR file paths and a `_classify_file` heuristic, while this traverses
+edges a parser actually read.
 
-The one page that talks first. Everything else answers a question you have to
-know to ask; **Insights** computes what the graph already noticed:
-
-- **Most depended-upon** — change these and the most breaks
-- **Possibly unused** — callables nothing references
-- **Cycles** — groups that depend on each other
-- **Coupling** — entities reaching across several subsystems
+**Insights** — the one page that talks first. Everything else answers a
+question you have to know to ask; this computes what the graph already noticed:
+most-depended-on entities, unused callables, dependency cycles, and cross-
+subsystem coupling.
 
 The unused list is the one that needed care. Raw "no inbound reference" was
 **156 of Aeon's 335 callables** — a number nobody would trust, because a
@@ -187,22 +177,60 @@ points are detected from the graph itself (a `@router.get` decorator shows up
 as a reference to a file-scoped verb) and held back separately: **96 likely
 unused, 60 excluded as entry points or runtime hooks**.
 
-**Export report** writes it all as markdown.
+**Knowledge** — query documents instead of code (see below).
 
-### Interactive map
+**History** — saved corpora, restored without re-parsing (see below).
 
-**Interactive map** writes the Atlas as a single self-contained HTML file —
-**0.31 MB** for Aeon's 1,038 nodes and 1,678 edges. Open it from `file://` on a
-machine that has never heard of Grapheon and you can still pan, zoom to the
-cursor, search, click a node to see its neighbours, and click a subsystem in the
-legend to isolate it. No server, no network, no dependencies: the drive treats
-any non-`file:` request from the exported page as a failure.
+---
+
+## Command palette (⌘K / Ctrl+K)
+
+By the time the app had five pages, a file tree, a code viewer and two search
+boxes, there were four different places to type a name into and you had to
+know which kind of thing you were after before you could start. **⌘K** is the
+one box that doesn't care: entities, files and commands are searched together
+and ranked side by side. Arrow keys move, Enter opens, Escape closes.
+
+Sections are ordered by their *best* match rather than by a fixed precedence,
+because no fixed order gets both cases right — typing `blast radius` should
+offer the page, typing `llm.py` should offer the file. Commands carry the
+words someone would actually type and get a modest bias: there are eight
+commands and a thousand entities, every entity is *also* reachable from the
+map, the tree and two search boxes, and the palette is the only route to a
+command. The bias is smaller than the gap between match tiers, so a weak
+command match can never jump ahead of a strong one on real content.
+
+Opening it with an empty box is the case worth optimising, because *"reopen
+what I was just looking at"* is the most common reason to press the key at
+all — so it lists **recent files** first, each reopening at the line you left
+it on. Recents are per corpus and are filtered against what the corpus
+actually has: a path stored from a previous build of the same repo is dropped
+rather than offered as a click that opens an empty pane. The file tree grows
+a **Recent** section from the same store.
+
+There's no ⌘ key on a phone, so the drawer carries a **Search everything**
+button, and the palette sits higher on a narrow screen — a vertically centred
+one would have its results hidden behind the on-screen keyboard.
+
+---
+
+## Interactive map export
+
+**Interactive map** on the Insights page writes the Atlas as a single
+self-contained HTML file — **0.31 MB** for Aeon's 1,038 nodes and 1,678 edges.
+Open it from `file://` on a machine that has never heard of Grapheon and you
+can still pan, zoom to the cursor, search, click a node to see its neighbours,
+and click a subsystem in the legend to isolate it. No server, no network, no
+dependencies: the drive treats any non-`file:` request from the exported page
+as a failure.
 
 This replaced a PNG export. A picture of a thousand dots is a picture of a
 thousand dots — the entire value of the map is being able to move around it. The
 renderer inside the export is a few hundred lines of plain 2D canvas rather than
 the app's PixiJS one, which would have added ~470 KB to every file to redraw
 circles whose positions are already computed.
+
+---
 
 ## History
 
@@ -234,6 +262,8 @@ first — they're large and always regenerable, and an unbounded cache would
 eventually fail at write time, which is the worst moment to find out.
 
 The Knowledge query box also keeps your recent questions, per corpus.
+
+---
 
 ## Knowledge base
 
@@ -268,8 +298,10 @@ Android WebViews don't have yet.)
 
 What it deliberately does **not** do is write prose answers — that needs an
 LLM. You get ranked evidence with its source, which for a base you're trying
-to trust is the more useful half. PDF support and optional on-device
-embeddings are the natural next steps.
+to trust is the more useful half. Optional on-device embeddings are the
+natural next step.
+
+---
 
 ## Linking code and documents
 
@@ -290,7 +322,9 @@ vocabulary rather than a reference.
 On Aeon that gives 218 mentions — `Neo4jStore` correctly resolving to the one
 passage that discusses it, in "Hard-won gotchas".
 
-## File explorer
+---
+
+## File explorer and code viewer
 
 **Files** in the sidebar opens the repo as a directory tree beside the map.
 Every readable file is there — including the ones the extractor never parsed,
@@ -305,83 +339,21 @@ repository seen two ways, and selecting a node reveals it in the tree.
 Reading order is nav rail → tree → map → code, the same left-to-right layout
 every editor uses. **Drag the dividers** to rebalance — the map reflows live
 (it's a canvas, so that isn't automatic), widths persist across reloads, and
-double-clicking a divider resets it. The map keeps a 200px floor whatever the
-dividers say. **Tabs** appear once a second file is open (a lone tab is
-noise above a header that already names the file), and closing one falls back
-to its left neighbour.
+double-clicking a divider resets it. **Tabs** appear once a second file is
+open, and closing one falls back to its left neighbour.
 
 **Search** scans the contents of every readable file — the question the graph
 can't answer, like *where does `AZURE_OPENAI_ENDPOINT` appear*. Results stream
 in grouped by file with the match highlighted; clicking a hit opens that file
 at that line. A cold search over Aeon's 142 files takes ~3s (each file is
-fetched once), and every search after that is ~100ms.
-
-For a dropped folder or zip this costs nothing — those files were already in
-memory and were simply being discarded. For prebuilt corpora, docs and
-manifests are captured up to a **2 MB budget** on top of the graph's own
-files, chosen by filename rather than extension (an extension whitelist looked
-sensible and swept in 17.6 MB of data dumps).
-
-## Command palette (⌘K / Ctrl+K)
-
-By the time the app had five pages, a file tree, a code viewer and two search
-boxes, there were four different places to type a name into and you had to
-know which kind of thing you were after before you could start. **⌘K** is the
-one box that doesn't care: entities, files and commands are searched together
-and ranked side by side. Arrow keys move, Enter opens, Escape closes.
-
-Sections are ordered by their *best* match rather than by a fixed precedence,
-because no fixed order gets both cases right — typing `blast radius` should
-offer the page, typing `llm.py` should offer the file. Commands carry the
-words someone would actually type (`blast radius`, not the label `Go to Blast
-Radius`) and get a modest bias: there are eight commands and a thousand
-entities, every entity is *also* reachable from the map, the tree and two
-search boxes, and the palette is the only route to a command. The bias is
-smaller than the gap between match tiers, so a weak command match can never
-jump ahead of a strong one on real content.
-
-Opening it with an empty box is the case worth optimising, because *"reopen
-what I was just looking at"* is the most common reason to press the key at
-all — so it lists **recent files** first, each reopening at the line you left
-it on. Recents are per corpus and are filtered against what the corpus
-actually has: a path stored from a previous build of the same repo is dropped
-rather than offered as a click that opens an empty pane. The file tree grows
-a **Recent** section from the same store.
-
-There's no ⌘ key on a phone, so the drawer carries a **Search everything**
-button, and the palette sits higher on a narrow screen — a vertically centred
-one would have its results hidden behind the on-screen keyboard.
-
-## Code viewer
+fetched once), and every search after that is ~110ms.
 
 Select any entity and hit **View code** — the map shrinks left, the source
 opens right, scrolled to that entity's lines with its range highlighted.
-Syntax highlighting via highlight.js.
-
-It's a split *mode*, not a page, deliberately: the map has to stay visible
-beside the code (that's the point), it works from Blast Radius as well as the
-Atlas, and code is always *about a selection* rather than a destination.
-
-The gutter is graph-aware — lines where a neighbour of the selection is
-defined get a marker, so the relations in the panel and the lines in the file
-are the same information seen two ways.
-
-Source text is captured at extraction time and served **per file** from a
-mirrored tree (`/data/<name>/src/…`). Not one blob: the full Aeon corpus is
-18 MB of text, and opening one function shouldn't download that. For a corpus
-extracted in the browser it's free — the worker still holds every file.
-
-**On a phone**, the header collapses to a tappable **Grapheon** logo that opens
-a drawer holding everything: navigation, Files, Search, and the repo/zip
-upload. Flat, they needed 504px of row inside a 390px screen — items
-overlapped and the upload button sat entirely off-screen, so there was no way
-to load a repo at all.
-
-The code pane goes full-screen over the map, and **word wrap is on by
-default** — a 390px screen shows ~45 columns, and without it `llm.py` needs
-706px of horizontal scrolling to read one line. Toggle it off from the header.
-Android's **back button closes the code pane** (then clears the selection)
-before it will leave the app.
+Syntax highlighting via highlight.js. On a phone the code pane goes
+full-screen with **word wrap on by default** — a 390px screen shows ~45
+columns, and without it `llm.py` needs 706px of horizontal scrolling to read
+one line.
 
 A corpus without captured sources simply has no code viewer. To add it to one
 built by the graphify CLI:
@@ -391,33 +363,7 @@ node pipeline/collect-sources.js --name aeon --repo ../Project-Aeon
 npm run build:graph -- --name aeon
 ```
 
-## Pages
-
-**Atlas** — the map. Search over labels and paths, filter by kind, jump to a
-subsystem from the legend, click any node to spotlight its neighbourhood and
-list its relations, each tagged EXTRACTED or INFERRED.
-
-The legend **collapses to a pill** on any screen, and the choice is
-remembered. It defaults open on a desktop, where it is useful context, and
-closed on a phone, where it would cover the whole map.
-
-**Blast Radius** — transitive impact, in both directions:
-
-- *Impact* — what breaks if this changes (follows edges pointing at the root)
-- *Dependencies* — what you'd need to understand to change it
-
-It takes a **change set**, not just one node — real changes touch several
-things at once, and asking about them together is not three separate
-questions: something two hops from each of three roots is two hops away, not
-six. Results export as a markdown report you can paste into a PR.
-
-Depth is adjustable 1–6, and results are grouped into rings by distance.
-**Certainty propagates along the path, not per edge** — one inferred hop
-anywhere upstream makes everything past it a maybe, and the panel says how many.
-
-This is the feature Graphify makes honest: Aeon computes the same idea from
-GitHub PR file paths and a `_classify_file` heuristic, while this traverses
-edges a parser actually read.
+---
 
 ## Current state
 
@@ -429,26 +375,37 @@ architecture without being told anything about it.
 Blast Radius on `aeon/frontend/src/lib/api.js` returns the real dependency
 chain: all 10 pages that import it, then `App.jsx` at 2 hops, `main.jsx` at 3.
 
-Production build verified serving statically — ~470 KB JS (145 KB gzip) plus
-363 KB of data, no backend. The same build runs in-browser extraction (WASM
-grammars ship as assets) and is what the Android shell wraps: a debug APK is
-built and verified, with a responsive phone UI checked by Playwright at
-390x844 with touch on every drive run.
+Production build verified serving statically — no backend, and the same build
+runs in-browser extraction (WASM grammars ship as assets). Verified against the
+container too: the full Playwright drive passes through nginx.
+
+**86 unit tests** (77 over the web libraries, 9 over the extractor), plus a
+Playwright drive that checks desktop and mobile
+viewports, in-browser extraction, the code viewer, file explorer, cross-file
+search, knowledge base, PDF ingestion, history, corpus diff, the command
+palette and the standalone HTML export — failing the run on any console error.
+
+**Android: signed release APK, verified.** `./android/docker-build.sh` produces
+a 5.4 MB `app-release.apk`; `apksigner verify` reports one signer,
+`CN=Grapheon`, RSA 2048, APK Signature Scheme v2, and the bundled assets are
+confirmed to be the current web build. Cold build 12m31s, warm 4m30s.
+
+> **If you fork or clone this:** release signing needs
+> `android/keystore.properties` and `android/keystore/`, both gitignored. Without
+> them the build **succeeds and produces an unsigned APK** rather than failing —
+> so always confirm with `apksigner verify`. If you have the keystore, back both
+> files up off the machine; losing them means never being able to update the app.
 
 Not built yet: multi-corpus UI, the agent layer, Neo4j push, and the Kagami
 adapter.
 
-**In flight — signed Android release.** The keystore exists
-(`android/keystore/` + `android/keystore.properties`, both gitignored —
-**back them up**; losing them loses the app identity), gradle signs when they
-are present, and the Docker toolchain image (`android/docker/`) is written but
-its first build failed at the SDK-install step with the error swallowed by a
-`> /dev/null` (since removed, so the next run will say what's wrong). Resume
-with: `./android/docker-build.sh`.
+---
 
 ## Known rough edges
 
-- **`CORPUS` is hardcoded** to `'aeon'` in `App.jsx`; multi-corpus is next.
+- **`DEFAULT_CORPUS` is hardcoded** to `'aeon'` in `App.jsx` — other corpora
+  load at runtime through the pickers or History, but there is no multi-corpus
+  UI yet.
 - **The `contains` anomaly is uninvestigated** — 43 edges separate a file from
   functions it contains, meaning Louvain sometimes splits them. Containment
   should be near-unbreakable, so this is a correctness smell.
@@ -457,7 +414,13 @@ with: `./android/docker-build.sh`.
 - The inferred-path caveat is built but unexercised: Aeon has only 14 INFERRED
   edges and none appear in the `api.js` example.
 - No guard for a blast radius that returns most of a dense graph.
-- Only `blast.js` has tests. The adapter and layout pass are verified by eye and
+- The adapter and layout pass have no unit tests — they're verified by eye and
   by the Playwright drive.
+- `pipeline/layout.js` is a *copy* of Kagami's, not a shared import, and has
+  diverged. Improvements don't flow back.
+- **Real-device Android performance is still unmeasured.** The APK is built,
+  signed and content-verified, but has not been profiled on a phone.
+- v3 APK signing is not enabled, so the APK is v2-only. v3 is what supports
+  key rotation.
 - `graphify update` warned that 12 JSON files (n8n workflow definitions)
   produced zero nodes and are absent from the graph.
