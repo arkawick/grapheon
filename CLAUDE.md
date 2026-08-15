@@ -248,6 +248,15 @@ out unsigned instead of failing). Host debug path still works:
   for tens of seconds (bit `_drive.mjs`, then would have bit `extract/node.mjs`).
   `corpus.js` also has a `looksMinified` guard (>400 chars/line average).
 - The synced assets are gitignored; the android/ project itself is committed.
+- **NEVER put a blanket `*.png` in .gitignore.** The rule for the drive's
+  verification screenshots swallowed all **26 Android resource PNGs** — every
+  launcher icon and every splash density. Locally the files were on disk, so
+  every build passed for weeks; it failed only in CI, on a fresh checkout:
+  `error: resource drawable/splash (aka app.grapheon:drawable/splash) not
+  found`. Screenshot rules are now scoped by location (`/*.png`, `/web/*.png`).
+  When a build is green locally and red in CI, diff the working tree against
+  what git actually ships — `git write-tree` + `git archive` gives you exactly
+  what CI checks out, and building THAT is the only real proof.
 - **Capacitor plugins must be declared in the ROOT package.json**, not in
   `web/`. The CLI reads the root manifest to register native plugins, and a
   plugin installed in a workspace syncs with no warning and no
