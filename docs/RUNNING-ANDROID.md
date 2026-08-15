@@ -170,6 +170,29 @@ Two details in that workflow are load-bearing:
   synced, and that produces a completely successful Gradle run. Verifying the
   payload is the only thing that catches it.
 
+### How the CI APK differs from a local one
+
+Compared entry-by-entry (hashes normalised): **458 of 473 common entries are
+byte-identical**, same `app.grapheon`, same versionCode/Name, same SDK levels.
+The rest:
+
+| | CI | local `docker-build.sh` |
+|---|---|---|
+| Variant | debug | release |
+| Signer | `CN=Android Debug` | `CN=Grapheon, OU=Dev, O=Grapheon, C=IN` |
+| Debuggable | yes | no |
+| Size | 5.8 MB | 5.2 MB |
+
+They **cannot upgrade each other on a device** — different signatures, so
+installing one over the other gives `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+Uninstall first.
+
+The CI APK also ships **252 fewer files**: `data/<name>/sources.json` is
+gitignored, so a fresh checkout has no source text and the bundled corpora get
+no code viewer, file explorer or cross-file search. A repo the user opens on
+the device works normally, since those sources arrive in memory. See
+[RUNNING-WEB.md](RUNNING-WEB.md#what-a-deployed-build-does-not-include).
+
 Release signing is deliberately **not** in CI — the keystore stays on your
 machine, and `./android/docker-build.sh` produces the signed build. The
 workflow ends with a commented, step-by-step recipe for enabling it later,
@@ -462,6 +485,26 @@ all exclude it, and `corpus.js` additionally guards on `looksMinified`
 A running Vite dev server holds watcher handles on the whole `web/` tree. Find
 the process **by listening port** and kill that one. Do not kill `node.exe`
 blindly — Claude Code itself runs on node.
+
+### CI fails with `resource drawable/splash not found`, but it builds locally
+
+Something the build needs is not in git. This exact failure was a blanket
+`*.png` in `.gitignore` — added for the drive's screenshots — silently
+swallowing all **26** Android resource PNGs: every launcher icon and every
+splash density. They were on disk locally, so every local build passed for
+weeks; only a fresh checkout exposed it.
+
+Screenshot ignores are now scoped by location (`/*.png`, `/web/*.png`), never
+globally. To check for the same class of bug anywhere else:
+
+```bash
+TREE=$(git write-tree)          # exactly what CI checks out
+git archive "$TREE" | tar -x -C /tmp/clean
+```
+
+then build *that*. A local build proves nothing here, because it uses the
+working tree — which is why the workflow validation missed it in the first
+place.
 
 ### Gradle can't find the SDK on the host route
 

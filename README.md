@@ -391,6 +391,14 @@ viewports, in-browser extraction, the code viewer, file explorer, cross-file
 search, knowledge base, PDF ingestion, history, corpus diff, the command
 palette and the standalone HTML export — failing the run on any console error.
 
+**Live demo and CI.** Three workflows run on every push: unit tests plus the
+full drive against the production build, a GitHub Pages deploy, and a debug APK
+artifact. One thing to know about anything built from a clean checkout —
+including the demo: `data/*/sources.json` is gitignored, so the bundled corpora
+ship as graphs with **no source text**. The map, Blast Radius, Insights and the
+HTML export all work; the code viewer, file explorer and cross-file search are
+available only for a repo you open yourself.
+
 **Android: signed release APK, verified.** `./android/docker-build.sh` produces
 a 5.4 MB `app-release.apk`; `apksigner verify` reports one signer,
 `CN=Grapheon`, RSA 2048, APK Signature Scheme v2, and the bundled assets are

@@ -25,6 +25,33 @@ This file (CLAUDE.md) stays the agent-facing one: gotchas, invariants and the
 things that cost debugging time. It deliberately overlaps with docs/ — the
 audience differs.
 
+## CI (.github/workflows/)
+
+Pushed to `origin` (GitHub). Three workflows, all on push to `main`:
+
+- `test.yml` — 86 unit tests, then the full drive against the PRODUCTION build
+  via `vite preview`. The drive fails the run on any console error, so it is
+  the real regression net.
+- `pages.yml` — deploys the demo. Sets `GRAPHEON_BASE` from
+  `actions/configure-pages`, because a project site is served from a subpath.
+- `android.yml` — debug APK as a run artifact. Debug, not release: an unsigned
+  release APK installs nowhere. Signing stays local; the workflow ends with a
+  commented recipe for enabling it.
+
+Two invariants for anything running on a Linux runner:
+- **`sh gradlew`, never `./gradlew`** — the wrapper is committed 100644.
+- **`vite preview --host 127.0.0.1`** — it otherwise binds the *name*
+  `localhost`, which can resolve IPv6-only, and the drive gets ECONNREFUSED
+  against a server that is plainly running.
+
+**A local build proves nothing about CI.** Both use the working tree; CI uses
+what git ships. To reproduce a CI-only failure:
+`git archive $(git write-tree) | tar -x -C <dir>` and build *that*. A clean
+checkout also has NO `data/*/sources.json` (gitignored), so CI artifacts and
+the Pages demo carry the corpus graphs but no source text — no code viewer,
+file explorer or file search for the bundled corpora. Not a bug; surprising
+from the outside.
+
 ## Stack & layout
 
 - **extract/** — the JS/WASM extraction port (web-tree-sitter). ESM, pure core,

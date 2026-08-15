@@ -404,6 +404,32 @@ Verified locally by serving the subpath build from an actual subpath and running
 the whole drive against it — code viewer, WASM extraction and file explorer
 included.
 
+#### What a deployed build does NOT include
+
+`data/<name>/sources.json` is gitignored — it is another project's source text
+and large. A build from a **fresh checkout** therefore has the corpus graphs
+but no source text, which means, for the bundled corpora only:
+
+| Feature | Deployed from a clean checkout |
+|---|---|
+| Atlas, Blast Radius, Insights, map export | work |
+| Code viewer, file explorer, cross-file search | unavailable |
+| All of the above for a repo the visitor opens themselves | work |
+
+Nothing is broken — this is the documented "a corpus without captured sources
+simply has no code viewer" behaviour — but it makes a deployed demo less
+complete than a local one, and it is not obvious from the outside.
+
+To ship the code viewer with the demo, commit the sources for a corpus whose
+code you own:
+
+```bash
+git add -f data/grapheon/sources.json      # 804 KB, this repo's own source
+```
+
+`data/aeon/sources.json` is 980 KB of a *different* project's code; publishing
+that is a separate decision from publishing its graph.
+
 > **nginx warning.** Never add a `types { ... }` block to the server context.
 > It **replaces** the whole inherited MIME map, so declaring
 > `application/wasm wasm` alone silently downgrades every other file — JS
