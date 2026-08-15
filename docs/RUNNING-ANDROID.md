@@ -14,7 +14,8 @@ detail.
 - [What the Android app actually is](#what-the-android-app-actually-is)
 - [Prerequisites](#prerequisites)
 - [Route 1 — Signed release APK in Docker (recommended)](#route-1--signed-release-apk-in-docker-recommended)
-- [Route 2 — Debug APK on the host](#route-2--debug-apk-on-the-host)
+- [Route 2 — Debug APK from GitHub Actions](#route-2--debug-apk-from-github-actions)
+- [Route 3 — Debug APK on the host](#route-3--debug-apk-on-the-host)
 - [Installing on a device](#installing-on-a-device)
 - [Signing and the keystore](#signing-and-the-keystore)
 - [Verifying a build](#verifying-a-build)
@@ -147,7 +148,39 @@ never in the image.
 
 ---
 
-## Route 2 — Debug APK on the host
+## Route 2 — Debug APK from GitHub Actions
+
+`.github/workflows/android.yml` builds a **debug** APK on every push and
+attaches it to the run as a downloadable artifact (`app-debug-apk`, kept 14
+days). Nothing to install locally, and it's a convenient way to hand someone a
+build.
+
+Debug rather than release on purpose: a debug APK is signed with Android's
+universal debug key and installs on any device immediately, whereas an
+**unsigned release APK installs nowhere** and is useless as an artifact.
+
+Two details in that workflow are load-bearing:
+
+- **`sh gradlew`, not `./gradlew`.** The wrapper is committed `100644` — it was
+  created on Windows, which has no exec bit — so `./gradlew` is *Permission
+  denied* on a Linux runner. `android/docker-build.sh` does the same thing for
+  the same reason.
+- **The APK is checked for `assets/public/index.html` before upload.** A blank
+  white screen on the device comes from an empty or stale web build being
+  synced, and that produces a completely successful Gradle run. Verifying the
+  payload is the only thing that catches it.
+
+Release signing is deliberately **not** in CI — the keystore stays on your
+machine, and `./android/docker-build.sh` produces the signed build. The
+workflow ends with a commented, step-by-step recipe for enabling it later,
+including the warning that `app/build.gradle` *succeeds and ships an unsigned
+APK* when the keystore is missing, so a mistyped secret would pass silently.
+
+Worth weighing before you enable it: that puts the app's only signing key in
+GitHub's infrastructure, and v3 signing (key rotation) is off, so there is no
+recovery path if it leaks.
+
+## Route 3 — Debug APK on the host
 
 Useful for quick iteration if you already have the Android toolchain.
 

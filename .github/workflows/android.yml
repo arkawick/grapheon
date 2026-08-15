@@ -1,0 +1,115 @@
+# Build the Android APK.
+#
+# Produces a DEBUG apk, downloadable from the run's artifacts. Debug rather
+# than release on purpose: a debug build is signed with Android's universal
+# debug key, so it installs on any device immediately, whereas an unsigned
+# release apk installs nowhere and is useless as an artifact.
+#
+# Release signing is deliberately NOT done here — the keystore stays on the
+# developer's machine. `./android/docker-build.sh` produces the signed release
+# locally. To move that here later, see the note at the bottom of this file.
+name: android
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # JDK 21 is what AGP 8.13 / Gradle 8.14 expect here, and what the local
+      # Docker toolchain image installs. `cache: gradle` covers the wrapper
+      # distribution and the dependency cache.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      # Explicit rather than trusting the runner image to have API 36 already:
+      # compileSdk/targetSdk are 36, and a missing platform fails deep inside
+      # Gradle with a much less obvious message.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platforms;android-36 build-tools;36.0.0
+
+      - name: Install
+        run: npm ci
+
+      # Layout artifacts are gitignored; regenerated from the committed
+      # canonical graphs so the shipped app has its corpora.
+      - name: Build corpora
+        run: |
+          npm run build:graph -- --name aeon
+          npm run build:graph -- --name grapheon
+
+      # Root base (no GRAPHEON_BASE): the WebView loads from the APK's own
+      # assets at the root, not from a subpath like Pages.
+      - name: Build the web app
+        run: npm run build
+
+      - name: Capacitor sync
+        run: npx cap sync android
+
+      # `sh gradlew`, not `./gradlew`: the wrapper is committed 100644 (it was
+      # created on Windows, which has no exec bit), so ./gradlew is Permission
+      # denied on a Linux runner. Same reason android/docker-build.sh does it.
+      - name: Assemble debug APK
+        run: sh gradlew assembleDebug --console=plain --no-daemon
+        working-directory: android
+
+      # A blank white screen on the device is the classic failure here, and it
+      # comes from an empty or stale web build being synced — which produces a
+      # perfectly successful Gradle run. Check the payload actually landed.
+      - name: Verify the APK carries the web build
+        run: |
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          ls -lh "$APK"
+          unzip -l "$APK" | grep -q 'assets/public/index.html' \
+            || { echo "APK has no assets/public/index.html — cap sync produced nothing"; exit 1; }
+          echo "bundled assets:"
+          unzip -l "$APK" | grep -c 'assets/public/' | xargs echo "  files under assets/public:"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+# ---------------------------------------------------------------------------
+# Enabling signed release builds later
+#
+# 1. base64 the keystore and add it as a repository secret:
+#       base64 -w0 android/keystore/grapheon-release.keystore
+#    -> secret ANDROID_KEYSTORE_B64
+#    plus ANDROID_STORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#
+# 2. before the Gradle step, recreate the two files the build expects:
+#       mkdir -p android/keystore
+#       echo "$ANDROID_KEYSTORE_B64" | base64 -d > android/keystore/grapheon-release.keystore
+#       printf 'storeFile=keystore/grapheon-release.keystore\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' \
+#         "$ANDROID_STORE_PASSWORD" "$ANDROID_KEY_ALIAS" "$ANDROID_KEY_PASSWORD" > android/keystore.properties
+#
+# 3. swap assembleDebug for assembleRelease, and ALWAYS verify afterwards:
+#       $ANDROID_HOME/build-tools/36.0.0/apksigner verify --print-certs <apk>
+#    because app/build.gradle SUCCEEDS and ships an UNSIGNED apk when the
+#    keystore is absent — a failed secret would otherwise pass silently.
+#
+# Worth weighing first: that puts the app's only signing key in GitHub's
+# infrastructure, and v3 signing (key rotation) is not enabled, so there is no
+# recovery path if it leaks. Restrict who can run workflows, pin actions to
+# SHAs, and never accept a PR that edits .github/ without reading it.
+# ---------------------------------------------------------------------------

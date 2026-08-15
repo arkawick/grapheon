@@ -27,6 +27,12 @@ from Project-Kagami's Atlas; the feature vocabulary comes from Project-Aeon.
 | **[docs/CONTRACT.md](docs/CONTRACT.md)** | The two JSON shapes everything meets at |
 | **[bench/RESULTS.md](bench/RESULTS.md)** | Measured extractor fidelity behind the JS port |
 
+**Continuous integration** (`.github/workflows/`): `test.yml` runs the 86 unit
+tests and the full Playwright drive against the production build on every push;
+`pages.yml` deploys the live demo to GitHub Pages; `android.yml` builds a debug
+APK and attaches it to the run. Release signing stays local by design — the
+keystore never enters CI.
+
 ---
 
 ## Quickstart
