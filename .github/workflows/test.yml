@@ -1,0 +1,82 @@
+# Unit tests + the full Playwright drive, on every push and PR.
+#
+# The drive is the real regression net here: it fails the run on ANY console
+# error, and it exercises in-browser WASM extraction, the code viewer, the
+# knowledge base, PDF ingestion and the standalone HTML export. Unit tests
+# alone would not catch a broken worker or a MIME-type regression.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # 86 tests, about a second, no browser needed. Runs first so an obvious
+      # break fails fast rather than after a browser download.
+      - name: Unit tests
+        run: npm test
+
+      # Layout artifacts are gitignored — regenerable in seconds from the
+      # canonical graphs that ARE committed. Same step the Docker image runs.
+      - name: Build corpora
+        run: |
+          npm run build:graph -- --name aeon
+          npm run build:graph -- --name grapheon
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # `vite preview` rather than a hand-rolled static server: it serves the
+      # real dist with correct MIME types, including `.mjs` for pdf.js's worker
+      # chunk — which nginx does NOT map by default and which a naive server
+      # gets wrong, producing a module-script refusal that looks like an app bug.
+      # `--host 127.0.0.1` is explicit on purpose: vite otherwise binds the
+      # name `localhost`, which can resolve IPv6-only, and then the drive gets
+      # ECONNREFUSED against a server that is demonstrably running.
+      #
+      # Polled with curl rather than adding a wait-on dependency for six lines.
+      - name: Serve the production build
+        run: |
+          npx vite preview --port 4173 --strictPort --host 127.0.0.1 &
+          for i in $(seq 1 60); do
+            curl -sf -o /dev/null http://127.0.0.1:4173/ && exit 0
+            sleep 1
+          done
+          echo "preview server never came up"; exit 1
+        working-directory: web
+
+      - name: Drive
+        run: npm run drive --workspace web
+        env:
+          GRAPHEON_URL: http://127.0.0.1:4173
+
+      # Screenshots are the point of the drive when something looks wrong but
+      # throws nothing — a cropped canvas or an off-screen button.
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: drive-screenshots
+          path: web/*.png
+          if-no-files-found: ignore
+          retention-days: 7

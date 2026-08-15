@@ -1,0 +1,83 @@
+# Deploy the Atlas to GitHub Pages.
+#
+# The demo is unusual in a useful way: because extraction runs client-side,
+# a visitor can drop their OWN repo onto the deployed site and get a map of it.
+# There is no backend to upload to — which is exactly why this deploys as a
+# plain static artifact with nothing else attached.
+#
+# One-time setup: repo Settings -> Pages -> Source: "GitHub Actions".
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege: the deploy job needs Pages write + an OIDC token to prove
+# it is this workflow. Nothing needs repo write.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race. `cancel-in-progress: false` so a queued deploy
+# finishes rather than being dropped — a half-finished deploy is worse than
+# a late one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Install
+        run: npm ci
+
+      # Layout artifacts are gitignored and regenerated from the committed
+      # canonical graphs, so a fresh checkout has everything it needs.
+      - name: Build corpora
+        run: |
+          npm run build:graph -- --name aeon
+          npm run build:graph -- --name grapheon
+
+      # A project site is served from a SUBPATH (https://user.github.io/repo/),
+      # where an absolute /data/... resolves to the domain root and 404s — the
+      # app would load and then sit on "Loading atlas…" forever. `base_path` is
+      # "/repo" (or empty for a user site); vite wants a trailing slash.
+      - name: Build
+        run: npm run build
+        env:
+          GRAPHEON_BASE: ${{ steps.pages.outputs.base_path }}/
+
+      # Belt and braces: the Pages Actions flow does not run Jekyll, but a
+      # stray _-prefixed file would be dropped if it ever did.
+      - name: Disable Jekyll
+        run: touch web/dist/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

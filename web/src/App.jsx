@@ -17,6 +17,7 @@ import SearchPanel from './SearchPanel.jsx';
 import Divider from './components/Divider.jsx';
 import { usePanelWidths, LIMITS } from './lib/usePanelWidths.js';
 import { fetchedSources, inMemorySources, lineOf } from './lib/sources.js';
+import { assetUrl } from './lib/asset.js';
 import { onBackButton } from './lib/backButton.js';
 
 const DEFAULT_CORPUS = 'aeon';
@@ -105,19 +106,19 @@ export default function App() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/data/${DEFAULT_CORPUS}.layout.json`);
+        const res = await fetch(assetUrl(`data/${DEFAULT_CORPUS}.layout.json`));
         if (!res.ok) throw new Error(`layout fetch failed: ${res.status}`);
         const layout = await res.json();
         let edges = null;
         if ((layout.meta?.counts?.edges ?? Infinity) <= EAGER_EDGE_LIMIT) {
-          const er = await fetch(`/data/${DEFAULT_CORPUS}.edges.json`);
+          const er = await fetch(assetUrl(`data/${DEFAULT_CORPUS}.edges.json`));
           if (er.ok) edges = readEdges(await er.json(), layout);
         }
         if (!cancelled) setCorpus({ name: DEFAULT_CORPUS, layout, edges });
 
         // Source manifest is optional — a corpus built without it simply has
         // no code viewer, so a 404 here is not an error.
-        const sr = await fetch(`/data/${DEFAULT_CORPUS}.sources.json`);
+        const sr = await fetch(assetUrl(`data/${DEFAULT_CORPUS}.sources.json`));
         if (!cancelled && sr.ok) setSources(fetchedSources(await sr.json()));
       } catch (err) {
         if (!cancelled) setError(err.message);
@@ -156,7 +157,7 @@ export default function App() {
   const ensureAdjacency = useCallback(async () => {
     if (adjacency) return adjacency;
     // Only the fetched default corpus can be missing edges (lazy path).
-    const res = await fetch(`/data/${corpus.name}.edges.json`);
+    const res = await fetch(assetUrl(`data/${corpus.name}.edges.json`));
     if (!res.ok) throw new Error(`edges fetch failed: ${res.status}`);
     const edges = readEdges(await res.json(), corpus.layout);
     setCorpus((c) => ({ ...c, edges }));

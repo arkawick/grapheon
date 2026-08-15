@@ -1,3 +1,4 @@
+import { assetUrl } from '../lib/asset.js';
 /**
  * The Grapheon mark — an interlocking 86 monogram with the app's blue gradient.
  *
@@ -13,7 +14,7 @@ export default function Logo({ height = 20, className = '' }) {
   return (
     <img
       className={`logo ${className}`.trim()}
-      src="/logo.svg"
+      src={assetUrl("logo.svg")}
       alt="Grapheon"
       height={height}
       style={{ height, width: 'auto' }}

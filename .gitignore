@@ -39,3 +39,6 @@ android/app/src/main/assets/capacitor.config.json
 # them means losing the app identity, leaking them means losing the app.
 android/keystore/
 android/keystore.properties
+
+# Drive output: the exported map, written next to the screenshots.
+exported-map.html

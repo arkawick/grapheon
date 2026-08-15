@@ -360,14 +360,49 @@ Pages, Netlify, Cloudflare Pages, S3, nginx, a USB stick.
 npm run build          # -> web/dist
 ```
 
-Two requirements:
+### Requirements of the host
 
-1. **Serve `.wasm` with `application/wasm`.** The tree-sitter grammars are
-   WASM; a wrong MIME type breaks in-browser extraction only, so the app looks
-   fine until someone opens a repo.
-2. **The router is `HashRouter`.** URLs look like `/#/blast`. This is
+1. **Serve `.wasm` as `application/wasm`.** The tree-sitter grammars are WASM;
+   a wrong type breaks in-browser extraction only, so the app looks fine until
+   someone opens a repo.
+2. **Serve `.mjs` as JavaScript.** pdf.js ships its worker as a `.mjs` chunk,
+   and `.mjs` is **not** in nginx's stock `mime.types` — only `js` is. It falls
+   through to `application/octet-stream`, browsers refuse a module script with
+   that type, and PDF import breaks *on the served build only* while working
+   perfectly under vite. `docker/nginx.conf` handles this with a location-scoped
+   `default_type`; any other host needs the equivalent.
+3. **The router is `HashRouter`.** URLs look like `/#/blast`. This is
    deliberate — deep links must survive on a static host with no rewrite rules.
    Do not "fix" it to `BrowserRouter` without adding a catch-all rewrite.
+
+### Deploying under a subpath
+
+A site served from `https://host/grapheon/` rather than a domain root needs the
+base set at build time:
+
+```bash
+GRAPHEON_BASE=/grapheon/ npm run build
+```
+
+Without it, the app loads and then sits on **"Loading atlas…"** forever:
+`fetch('/data/…')` resolves to the *domain* root and 404s. Every runtime URL
+goes through `assetUrl()` (`web/src/lib/asset.js`), which prefixes
+`import.meta.env.BASE_URL`, and the sources manifest stores a **relative** base
+for the same reason.
+
+> On git-bash, prefix the command with `MSYS_NO_PATHCONV=1` — otherwise the
+> shell rewrites `/grapheon/` into a Windows path and you get asset URLs like
+> `/Program Files/Git/grapheon/…`.
+
+### GitHub Pages
+
+`.github/workflows/pages.yml` does all of the above: it regenerates the layout
+artifacts, sets `GRAPHEON_BASE` from `actions/configure-pages`, and deploys.
+One-time setup: **Settings → Pages → Source: GitHub Actions**.
+
+Verified locally by serving the subpath build from an actual subpath and running
+the whole drive against it — code viewer, WASM extraction and file explorer
+included.
 
 > **nginx warning.** Never add a `types { ... }` block to the server context.
 > It **replaces** the whole inherited MIME map, so declaring

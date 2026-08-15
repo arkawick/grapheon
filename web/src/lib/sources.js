@@ -1,3 +1,5 @@
+import { assetUrl } from './asset.js';
+
 /**
  * Source-text access for the code viewer.
  *
@@ -25,7 +27,7 @@ export function fetchedSources(manifest) {
       if (!available.has(path)) return null;
       // Each segment is encoded separately: slashes are real path structure
       // and must survive, but '#' or '?' in a filename would truncate the URL.
-      const url = `${manifest.base}/${path.split('/').map(encodeURIComponent).join('/')}`;
+      const url = assetUrl(`${manifest.base}/${path.split('/').map(encodeURIComponent).join('/')}`);
       const res = await fetch(url);
       const text = res.ok ? await res.text() : null;
       cache.set(path, text);

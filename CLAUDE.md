@@ -267,6 +267,27 @@ out unsigned instead of failing). Host debug path still works:
 **Web app in Docker** (`docker/`, `docker-compose.yml`) — **verified**:
 `docker compose up web` → :8090, and the full Playwright drive passes against
 the container (in-browser WASM extraction and mobile pass included).
+- **`.mjs` is NOT in nginx's stock mime.types** — only `js` is. pdf.js ships
+  its worker as a `.mjs` chunk, so it fell through to
+  `default_type application/octet-stream` and the browser refused the module
+  script: **PDF import broken on the served build, fine under vite.** Fixed
+  with a location-scoped `default_type`, which adds one type without touching
+  the inherited map (see the next point for why that matters). Found only
+  because a static-server experiment reproduced it — the drive against the
+  container had never exercised a `.mjs` chunk.
+- **Deploy base is `GRAPHEON_BASE`** (vite `base`, default `/`). Every runtime
+  URL goes through `assetUrl()` in `web/src/lib/asset.js` and the sources
+  manifest stores a RELATIVE base, because GitHub Pages serves a project site
+  from a subpath where absolute `/data/...` hits the domain root and 404s —
+  symptom is "Loading atlas…" forever. Verified by serving a subpath build from
+  an actual subpath and running the full drive against it.
+- **git-bash rewrites env values that look like paths.**
+  `GRAPHEON_BASE=/grapheon/` became `/Program Files/Git/grapheon/` in the built
+  asset URLs. Same `MSYS_NO_PATHCONV=1` fix as the docker paths.
+- **`vite preview` binds the NAME `localhost`**, which can resolve IPv6-only;
+  the drive then gets ECONNREFUSED against a server that is plainly running.
+  Pass `--host 127.0.0.1`. (Same family as the `--host 0.0.0.0` rule in Docker
+  and the `localhost` vs `127.0.0.1` split that hid a working static server.)
 - **NEVER add a `types { ... }` block to nginx.conf's server context.** It
   REPLACES the whole inherited map, so declaring `application/wasm wasm` alone
   downgrades every other file — JS bundles included — to octet-stream, and a

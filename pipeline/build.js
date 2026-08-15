@@ -140,7 +140,9 @@ function main() {
     const manifest = path.join(ROOT, 'web', 'public', 'data', `${name}.sources.json`);
     fs.writeFileSync(manifest, JSON.stringify({
       meta: { buildId: id },
-      base: `/data/${name}/src`,
+      // Relative on purpose: the app prefixes its deploy base at runtime,
+      // so the same artifact works at a site root and under a subpath.
+      base: `data/${name}/src`,
       paths: Object.keys(sources),
     }));
     const mmb = (fs.statSync(manifest).size / 1e6).toFixed(2);
