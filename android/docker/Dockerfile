@@ -45,4 +45,10 @@ WORKDIR /work
 
 # The whole chain: web build -> capacitor sync -> signed release APK.
 # gradlew is invoked via sh because a Windows-mounted volume loses exec bits.
-CMD ["bash", "-lc", "npm ci && npm run build && npx cap sync android && cd android && sh gradlew assembleRelease --console=plain"]
+#
+# `bash -c`, NOT `bash -lc`: a login shell re-sources /etc/profile, which
+# REPLACES the PATH this image set — so $JAVA_HOME/bin and the SDK tools vanish
+# and anything calling `java` directly dies with "exec: java: not found". The
+# build itself survived that (gradle finds java via JAVA_HOME) which is exactly
+# why it stayed hidden; apksigner, run the same way, did not.
+CMD ["bash", "-c", "npm ci && npm run build && npx cap sync android && cd android && sh gradlew assembleRelease --console=plain"]

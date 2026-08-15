@@ -41,9 +41,10 @@ node pipeline/collect-sources.js --name <n> --repo <path>   # sources for a grap
 npm run build:graph -- --name <name>       # adapt + Louvain + FA2 + sources
 npm run dev                                # http://localhost:5180
 
-npm test                                   # blast.js + corpus.js unit tests
+npm test                                   # 77 unit tests across web/src/lib
 npm run drive --workspace web              # Playwright: desktop + mobile pass
 npm run sync:android                       # web build + capacitor sync
+./android/docker-build.sh                  # signed release APK, all in Docker
 ```
 
 The graphify CLI route (`graphify update <repo> --no-cluster`, copy
@@ -266,29 +267,45 @@ the container (in-browser WASM extraction and mobile pass included).
 - `.dockerignore` excludes `android/` (separate build, megabytes of synced
   minified bundles) and anything matching `keystore*`.
 
-## IN FLIGHT: signed Android release (resume here)
+## Signed Android release (DONE, verified 2026-08-15)
 
-Where this stands as of 2026-08-02:
+`./android/docker-build.sh` produces a **signed 5.4 MB app-release.apk**,
+verified with `apksigner verify --print-certs`: one signer,
+`CN=Grapheon, OU=Dev, O=Grapheon, C=IN`, RSA 2048, **APK Signature Scheme v2**.
+Contents checked too — the bundled `assets/public` carries the current web
+build (palette + HTML export strings present) and both corpora.
 
-- **Done & verified**: android/ separated to root (git renames), capacitor
-  config at root, `npx cap sync android` works from root, web app fully green
-  after the move (drive: desktop + mobile + in-browser extraction).
-- **Done, NOT yet verified**: release signing. The keystore was GENERATED
-  (`android/keystore/grapheon-release.keystore`, alias `grapheon`, random
-  password in `android/keystore.properties`; both gitignored — **tell the user
-  to back these two files up**, they are the app identity). `app/build.gradle`
-  signs release builds when keystore.properties exists, silently skips
-  signing when absent.
-- **Broken**: the Docker toolchain image build
-  (`docker build -t grapheon-android-build android/docker`) failed at the
-  sdkmanager RUN step, exit 1, error invisible because the step piped to
-  /dev/null — that suppression is now removed, so re-running will show the
-  real error. Suspects: sdkmanager/JDK interaction, or a licenses prompt.
-- **Next actions**: (1) re-run the image build and read the actual error,
-  (2) `./android/docker-build.sh` for the signed APK,
-  (3) verify the signature (`apksigner verify --print-certs` from
-  build-tools, or `jarsigner -verify`),
-  (4) the debug-APK-on-real-phone perf test is still owed.
+- **Back up `android/keystore/grapheon-release.keystore` and
+  `android/keystore.properties`.** Both gitignored, so no commit protects
+  them; losing them loses the app identity permanently. `app/build.gradle`
+  signs when keystore.properties exists and silently ships UNSIGNED when it
+  does not — absent signing material is not a build failure.
+- **The image build was never actually broken.** The sdkmanager step
+  (cmdline-tools 11076708, licences via `yes |`) completes fine; the earlier
+  exit-1 was Docker's engine in the wedged state described above, which makes
+  every CLI call hang or fail with no useful output. Check `docker info`
+  responds *before* debugging a Dockerfile.
+- **`npm ci` must never see the host's node_modules.** The repo is bind-mounted
+  from Windows, so `/work/node_modules` held `@esbuild/win32-x64/esbuild.exe`;
+  `npm ci` deletes node_modules first and died on `EIO: unlink` over the mount
+  — after having already removed `node_modules/esbuild`, which broke
+  `npm run build` ON THE HOST. Had the unlink succeeded it would have replaced
+  the whole host install with Linux binaries. `docker-build.sh` now masks every
+  workspace's node_modules with a **named volume**, which both fixes the
+  failure and keeps the two platforms' installs apart. If the host toolchain
+  ever breaks right after an APK build, run `npm install` at the root.
+- **Named volumes, not anonymous ones**, so npm and Gradle caches survive
+  between runs (`GRADLE_USER_HOME=/gradle-home`). First build ~12.5 min, mostly
+  Gradle over the Windows bind mount. `docker volume rm grapheon-android-*`
+  forces a clean install.
+- **`bash -c`, never `bash -lc`, in the image CMD.** A login shell re-sources
+  /etc/profile and REPLACES the PATH the image set, so `$JAVA_HOME/bin` and the
+  SDK tools disappear. The build survived it (Gradle finds java through
+  JAVA_HOME) which is precisely why it went unnoticed — `apksigner` run the
+  same way failed with `exec: java: not found`.
+- Still owed: the **debug-APK-on-real-phone perf test**. Also worth
+  considering: `enableV3Signing` is off, so the APK is v2-only — v3 is what
+  supports key rotation, which matters if the keystore ever has to change.
 
 ## TypeScript
 

@@ -146,7 +146,18 @@ on the host:
 
 The repo is volume-mounted into the container, which is what keeps the
 keystore out of image layers — signing material is never baked into anything
-that could be pushed.
+that could be pushed. **Verified**: a 5.4 MB signed APK, one signer,
+`CN=Grapheon`, RSA 2048, APK Signature Scheme v2, with the bundled assets
+confirmed to be the current web build.
+
+Every workspace's `node_modules` is masked by a named Docker volume rather
+than shared with the host. That is a correctness measure, not a speed one: the
+host tree is Windows, so `/work/node_modules` holds `esbuild.exe` and friends,
+and `npm ci` inside a Linux container deletes node_modules before installing.
+Sharing it broke the build (`EIO: unlink`) *and* the host's own toolchain on
+the way. Named rather than anonymous volumes means the npm and Gradle caches
+survive between runs; `docker volume rm grapheon-android-*` forces a clean
+install. First build is ~12.5 minutes, most of it Gradle over the bind mount.
 
 **Signing** reads `android/keystore.properties` (gitignored) pointing at
 `android/keystore/` (gitignored). Without them, release builds come out
