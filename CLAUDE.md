@@ -161,9 +161,11 @@ Working: Atlas (map, search, kind filters, subsystem legend, click-to-select wit
 neighbourhood spotlight), Blast Radius (both directions, depth 1–6, path-certainty),
 sidebar shell, **in-browser extraction** (folder pick on desktop, zip on mobile,
 Worker-based), **responsive phone UI** (top bar, bottom sheets, legend toggle —
-asserted by the drive's mobile pass at 390x844/touch), and a **debug APK** built
-and content-verified. Production build verified serving statically. 15 unit
-tests; the drive checks desktop + mobile + in-browser extraction on every run.
+asserted by the drive's mobile pass at 390x844/touch), a **command palette** (⌘K over
+entities, files and commands, with per-corpus recent files), and a **debug APK**
+built and content-verified. Production build verified serving statically. **77
+unit tests**; the drive checks desktop + mobile + in-browser extraction, the
+standalone HTML export and the palette on every run.
 
 ## JS extraction (extract/ + bench/)
 
@@ -503,6 +505,34 @@ like a `.md`. Three traps, each cost a round:
 - The drive's fixture is a **hand-built PDF** (`web/_fixture-pdf.mjs`) with two
   font sizes, so the heading heuristic is actually exercised. Real PDFs on this
   machine are an image-only poster and a personal CV; neither belongs in a repo.
+
+## Command palette (lib/palette.js + components/Palette.jsx)
+
+⌘/Ctrl+K over entities, files and commands at once. Ranking is pure and tested
+(`palette.test.js`); the component is keyboard handling and markup.
+- **Sections sort by their best item, not by a fixed precedence.** `blast
+  radius` wants the page, `llm.py` wants the file, and no fixed order gets both.
+- **Commands need a `keywords` field.** Nobody types "go to blast radius" — they
+  type "blast radius", which is a mid-string hit inside the label and two tiers
+  down. `keywords` is what the command is ABOUT.
+- **`COMMAND_BIAS` is 120 and must stay under 200**, the smallest gap between
+  match tiers. It exists because Aeon's corpus contains its own docs, so
+  "Blast Radius" is an exact entity match six times over and buried the command
+  to open the page. Under the tier gap, it can reorder equals but never lift a
+  weak command match over a strong content one — a test pins both halves.
+- **The empty palette is uncapped.** `LIMITS.commands` stops a broad *query*
+  flooding the list; applying it to the empty state silently hid the last two
+  commands, which are otherwise undiscoverable.
+- **Recents are per corpus AND filtered through `sources.has`.** A path stored
+  from a previous build of the same repo still resolves by name, so an unfiltered
+  list offers a click that opens an empty pane with no error.
+- **`.pal-label` needs `min-width: 0` *and* `max-width`.** A flex item will not
+  shrink below its content width without min-width:0, and a node label can be a
+  whole docstring line — with only min-width:0 it still squeezed the path to
+  29px. Both, or the row is useless.
+- The palette is z-index 40: above the phone drawer (20) and its scrim (19),
+  because it is reachable from every layer. It also joins the Android back
+  stack ahead of the drawer.
 
 ## File explorer
 

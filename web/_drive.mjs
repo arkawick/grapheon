@@ -277,6 +277,72 @@ await page.screenshot({ path: 'search-tabs.png' });
 await page.click('.code-head .close');
 await page.click('.explore-toggles button:nth-child(2)');
 
+// --- command palette + recent files ------------------------------------------
+// One box over entities, files and commands. Runs here, after the search step,
+// because opening a file above is what gives the recents something to show.
+await page.keyboard.press('Control+k');
+await page.waitForSelector('.palette', { timeout: 8000 });
+const palEmpty = await page.evaluate(() => ({
+  groups: [...document.querySelectorAll('.pal-list h4')].map((h) => h.textContent),
+  rows: document.querySelectorAll('.pal-row').length,
+  // Recents must survive being *offered*, so the first row is the last file
+  // opened rather than whatever command sorts first.
+  first: document.querySelector('.pal-row .pal-label')?.textContent,
+}));
+
+// Typing searches all three kinds at once, and the section that matched best
+// leads: "blast radius" wants the page even though Aeon's own docs contain
+// that heading six times over.
+await page.fill('.pal-input', 'blast radius');
+await page.waitForTimeout(250);
+const palRanked = await page.evaluate(() => ({
+  groups: [...document.querySelectorAll('.pal-list h4')].map((h) => h.textContent),
+  first: document.querySelector('.pal-row .pal-label')?.textContent,
+}));
+await page.screenshot({ path: 'palette.png' });
+await page.keyboard.press('Enter');
+await page.waitForSelector('.blast', { timeout: 10000 });
+const palNavigated = await page.evaluate(() => location.hash);
+
+// Arrow keys then Enter must open a FILE, which is what feeds recents.
+await page.click('.nav a[href="#/"]');
+await page.keyboard.press('Control+k');
+await page.waitForSelector('.palette', { timeout: 8000 });
+await page.fill('.pal-input', 'llm.py');
+await page.waitForTimeout(250);
+// Walk down to the Files section — the same key any user would reach for.
+let palGuard = 0;
+while (palGuard++ < 30) {
+  const group = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.pal-row')];
+    const activeRow = rows.find((r) => r.classList.contains('active'));
+    let g = null;
+    for (const el of document.querySelectorAll('.pal-list h4, .pal-row')) {
+      if (el.tagName === 'H4') g = el.textContent;
+      else if (el === activeRow) break;
+    }
+    return g;
+  });
+  if (group === 'Files') break;
+  await page.keyboard.press('ArrowDown');
+}
+await page.keyboard.press('Enter');
+await page.waitForSelector('.code-pane .code-line', { timeout: 10000 });
+const palOpened = await page.evaluate(() => ({
+  path: document.querySelector('.code-title .mono')?.textContent,
+  paletteGone: !document.querySelector('.palette'),
+}));
+
+// The tree grows a Recent section from the same store the palette reads.
+await page.click('.explore-toggles button:nth-child(1)');
+await page.waitForSelector('.filetree', { timeout: 8000 });
+const treeRecent = await page.evaluate(() => ({
+  header: document.querySelector('.tree-recent h4')?.textContent ?? null,
+  rows: [...document.querySelectorAll('.tree-recent .tree-row .label')].map((e) => e.textContent),
+}));
+await page.click('.explore-toggles button:nth-child(1)');
+await page.click('.code-head .close');
+
 // --- in-browser extraction: the whole pipeline in a worker -----------------
 // Drives the exact code path the folder picker uses, minus the picker.
 await page.click('.nav a[href="#/"]');
@@ -561,10 +627,13 @@ console.log(`join       : ${joinSummary}`);
 console.log(`pdf        : ${pdfHit ? `indexed, hit "${pdfHit.heading}" at ${pdfHit.source}` : 'NO HIT — pdf text did not reach the index'}`
   + ` (parsed with Uint8Array.toHex removed${hadToHex ? '' : '; runtime lacked it anyway'})`);
 console.log(`mobile code: ${mcode.lines} lines full-screen at ${mcode.fullWidth}px, horizontal overflow ${mcode.overflowX}px (want 0)`);
+console.log(`palette    : empty=[${palEmpty.groups.join(', ')}] ${palEmpty.rows} rows, first "${palEmpty.first}"`
+  + `; "blast radius" -> [${palRanked.groups.join(', ')}] "${palRanked.first}" -> ${palNavigated}`);
+console.log(`  keyboard : arrows+enter opened ${palOpened.path} (closed=${palOpened.paletteGone}); tree ${treeRecent.header}: ${treeRecent.rows.join(', ')}`);
 console.log(`map export : ${mapSize} MB standalone; "${exported.title}", ${exported.count}, ${exported.legend} subsystems in legend`
   + `; ${exported.foot}`);
 console.log(`  offline  : painted=${exported.painted} zooms=${exported.zooms} search=${exported.hits} hits -> ${exported.selected}`);
-console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, exported-map.png, mobile-{atlas,detail,blast,code}.png`);
+console.log(`screenshots: ${OUT}, blast.png, browser-extract.png, code-view.png, exported-map.png, palette.png, mobile-{atlas,detail,blast,code}.png`);
 if (errors.length) {
   console.error(`\n${errors.length} console error(s):`);
   for (const e of errors.slice(0, 10)) console.error('  ' + e);

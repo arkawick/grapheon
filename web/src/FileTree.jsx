@@ -49,7 +49,7 @@ function Row({ node, depth, openDirs, toggle, onPick, current, nodeByPath }) {
   );
 }
 
-export default function FileTree({ paths, nodeByPath, current, onPick, onClose, width }) {
+export default function FileTree({ paths, nodeByPath, current, onPick, onClose, width, recent = [] }) {
   const [filter, setFilter] = useState('');
   const [openDirs, setOpenDirs] = useState(() => new Set());
 
@@ -100,6 +100,31 @@ export default function FileTree({ paths, nodeByPath, current, onPick, onClose, 
         <button className="close" onClick={onClose} aria-label="Close files">×</button>
       </header>
       <div className="tree-scroll">
+        {/* Only when unfiltered: a filter is an explicit question, and answering
+            it with files you happened to open earlier is noise. */}
+        {!filter.trim() && recent.length > 0 && (
+          <section className="tree-recent">
+            <h4>Recent</h4>
+            {recent.slice(0, 5).map((r) => {
+              const mapped = nodeByPath.get(r.path);
+              return (
+                <button
+                  key={r.path}
+                  className={`tree-row file${current === r.path ? ' current' : ''}`}
+                  style={{ paddingLeft: 6 }}
+                  onClick={() => onPick(r.path, r.line)}
+                  title={r.path}
+                >
+                  <span
+                    className={`tree-dot${mapped ? '' : ' unmapped'}`}
+                    style={mapped ? { background: `hsl(${mapped.h} 68% 62%)` } : undefined}
+                  />
+                  <span className="label">{r.path.slice(r.path.lastIndexOf('/') + 1)}</span>
+                </button>
+              );
+            })}
+          </section>
+        )}
         {tree.map((n) => (
           <Row
             key={n.path} node={n} depth={0}

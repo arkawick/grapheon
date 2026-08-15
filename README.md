@@ -311,6 +311,36 @@ manifests are captured up to a **2 MB budget** on top of the graph's own
 files, chosen by filename rather than extension (an extension whitelist looked
 sensible and swept in 17.6 MB of data dumps).
 
+## Command palette (⌘K / Ctrl+K)
+
+By the time the app had five pages, a file tree, a code viewer and two search
+boxes, there were four different places to type a name into and you had to
+know which kind of thing you were after before you could start. **⌘K** is the
+one box that doesn't care: entities, files and commands are searched together
+and ranked side by side. Arrow keys move, Enter opens, Escape closes.
+
+Sections are ordered by their *best* match rather than by a fixed precedence,
+because no fixed order gets both cases right — typing `blast radius` should
+offer the page, typing `llm.py` should offer the file. Commands carry the
+words someone would actually type (`blast radius`, not the label `Go to Blast
+Radius`) and get a modest bias: there are eight commands and a thousand
+entities, every entity is *also* reachable from the map, the tree and two
+search boxes, and the palette is the only route to a command. The bias is
+smaller than the gap between match tiers, so a weak command match can never
+jump ahead of a strong one on real content.
+
+Opening it with an empty box is the case worth optimising, because *"reopen
+what I was just looking at"* is the most common reason to press the key at
+all — so it lists **recent files** first, each reopening at the line you left
+it on. Recents are per corpus and are filtered against what the corpus
+actually has: a path stored from a previous build of the same repo is dropped
+rather than offered as a click that opens an empty pane. The file tree grows
+a **Recent** section from the same store.
+
+There's no ⌘ key on a phone, so the drawer carries a **Search everything**
+button, and the palette sits higher on a narrow screen — a vertically centred
+one would have its results hidden behind the on-screen keyboard.
+
 ## Code viewer
 
 Select any entity and hit **View code** — the map shrinks left, the source

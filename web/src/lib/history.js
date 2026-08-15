@@ -215,3 +215,44 @@ export function rememberQuery(corpus, query) {
     localStorage.setItem(Q_KEY, JSON.stringify({ ...all, [corpus]: list }));
   } catch { /* private mode */ }
 }
+
+// --- recent files ------------------------------------------------------------
+// Same shape and the same reasoning as recent queries: per-corpus, tiny, and
+// worthless if it outlives the corpus it describes.
+
+const F_KEY = 'grapheon.recentFiles.v1';
+const MAX_FILES = 12;
+
+/**
+ * Most-recently-opened files for a corpus, newest first.
+ *
+ * `exists` is not optional politeness — a stored path from a previous build of
+ * the same repo may no longer be in the corpus, and offering it means a click
+ * that opens an empty pane with no explanation. Callers pass `sources.has`.
+ */
+export function recentFiles(corpus, exists = null) {
+  try {
+    const list = JSON.parse(localStorage.getItem(F_KEY) ?? '{}')[corpus] ?? [];
+    return exists ? list.filter((f) => exists(f.path)) : list;
+  } catch {
+    return [];
+  }
+}
+
+export function rememberFile(corpus, path, line = null) {
+  if (!corpus || !path) return;
+  try {
+    const all = JSON.parse(localStorage.getItem(F_KEY) ?? '{}');
+    const list = [{ path, line }, ...(all[corpus] ?? []).filter((f) => f.path !== path)]
+      .slice(0, MAX_FILES);
+    localStorage.setItem(F_KEY, JSON.stringify({ ...all, [corpus]: list }));
+  } catch { /* private mode */ }
+}
+
+export function clearRecentFiles(corpus) {
+  try {
+    const all = JSON.parse(localStorage.getItem(F_KEY) ?? '{}');
+    delete all[corpus];
+    localStorage.setItem(F_KEY, JSON.stringify(all));
+  } catch { /* private mode */ }
+}

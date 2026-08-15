@@ -8,7 +8,8 @@ import BlastRadiusPage from './pages/BlastRadiusPage.jsx';
 import KnowledgePage from './pages/KnowledgePage.jsx';
 import HistoryPage from './pages/HistoryPage.jsx';
 import InsightsPage from './pages/InsightsPage.jsx';
-import { saveCorpus, loadCorpus } from './lib/history.js';
+import { saveCorpus, loadCorpus, recentFiles, rememberFile } from './lib/history.js';
+import Palette from './components/Palette.jsx';
 import { joinDocsToCode, passagesOf } from './lib/join.js';
 import CodePane from './CodePane.jsx';
 import FileTree from './FileTree.jsx';
@@ -92,6 +93,11 @@ export default function App() {
   // search hit lands where you left it.
   const [tabs, setTabs] = useState([]);   // [{path, line}]
   const [openPath, setOpenPath] = useState(null);
+  // Files opened recently, per corpus, newest first — the palette's default
+  // listing and the tree's top section. Held in state as well as localStorage
+  // so both re-render the moment a file is opened.
+  const [recent, setRecent] = useState([]);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const { widths, raw: rawWidths, narrow, set: setWidth, reset: resetWidth } = usePanelWidths();
 
   // --- default corpus ------------------------------------------------------
@@ -351,18 +357,39 @@ export default function App() {
   // A link is only meaningful for the corpus it was computed against.
   useEffect(() => { setLinked(null); }, [corpus]);
 
+  // Recents are per corpus, and a stored path this corpus does not have must
+  // not be offered: opening it would show an empty pane with no explanation.
+  useEffect(() => {
+    setRecent(corpus?.name ? recentFiles(corpus.name, sources?.has) : []);
+  }, [corpus, sources]);
+
+  // Cmd/Ctrl+K from anywhere, including inside the other search boxes — that
+  // ubiquity is the whole reason the shortcut is worth having. preventDefault
+  // matters: Ctrl+K is Chrome's own omnibox shortcut and would win otherwise.
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   useEffect(() => () => workerRef.current?.terminate(), []);
 
   // Android back dismisses the top layer — code, then tree, then selection —
   // before it is allowed to leave the app.
   useEffect(() => onBackButton(() => {
+    if (paletteOpen) { setPaletteOpen(false); return true; }
     if (menuOpen) { setMenuOpen(false); return true; }
     if (codeOpen) { setCodeOpen(false); setOpenPath(null); setTabs([]); return true; }
     if (searchOpen) { setSearchOpen(false); return true; }
     if (treeOpen) { setTreeOpen(false); return true; }
     if (selected) { setSelected(null); return true; }
     return false;
-  }), [menuOpen, codeOpen, searchOpen, treeOpen, selected]);
+  }), [paletteOpen, menuOpen, codeOpen, searchOpen, treeOpen, selected]);
 
   // Deterministic entry point for automation (and a handy console API):
   // window.__loadRepoFiles([{path, src}], 'name') drives the exact same path
@@ -424,6 +451,10 @@ export default function App() {
 
   /** Open a file from the tree or a search hit — no graph node required. */
   const openFile = useCallback((path, line = null) => {
+    if (corpus?.name) {
+      rememberFile(corpus.name, path, line);
+      setRecent(recentFiles(corpus.name, sources?.has));
+    }
     setTabs((prev) => {
       const i = prev.findIndex((t) => t.path === path);
       if (i === -1) return [...prev, { path, line }];
@@ -435,7 +466,7 @@ export default function App() {
     });
     setOpenPath(path);
     setCodeOpen(true);
-  }, []);
+  }, [corpus, sources]);
 
   const closeTab = useCallback((path) => {
     setTabs((prev) => {
@@ -481,10 +512,11 @@ export default function App() {
     searchOpen, setSearchOpen, menuOpen, setMenuOpen, narrow,
     knowledge, ingestDocuments, restoreCorpus, renderer: rendererRef,
     linked, linkCorpus, unlinkCorpus: () => setLinked(null),
+    recent, openPalette: () => setPaletteOpen(true),
   }), [corpus, adjacency, ensureAdjacency, nodeById, nodeByPath, selected, focus, highlight,
        setKindFilter, extractRepo, busy, sources, codeOpen, treeOpen, openFile,
        searchOpen, menuOpen, narrow, knowledge, ingestDocuments, restoreCorpus,
-       linked, linkCorpus]);
+       linked, linkCorpus, recent]);
 
   const layout = corpus?.layout;
 
@@ -502,6 +534,7 @@ export default function App() {
                 width={widths.side}
                 paths={[...sources.paths].sort()}
                 nodeByPath={nodeByPath}
+                recent={recent}
                 current={openedFile?.path ?? null}
                 onPick={openFile}
                 onClose={() => setTreeOpen(false)}
@@ -605,6 +638,10 @@ export default function App() {
               />
             </>
           )}
+
+          {/* Above everything, outside the panels, because it is reachable from
+              all of them. Inside the router so its commands can navigate. */}
+          <Palette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         </div>
       </GraphContext.Provider>
     </HashRouter>

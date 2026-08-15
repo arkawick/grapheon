@@ -12,6 +12,9 @@ import {
 // zip path is the only one that works, so it leads.
 const HAS_DIR_PICKER = !('ontouchstart' in window) || navigator.maxTouchPoints === 0;
 
+// Only for the label on the shortcut hint — the handler accepts both.
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
 const NAV = [
   { to: '/', label: 'Atlas', hint: 'the map' },
   { to: '/insights', label: 'Insights', hint: 'what the graph noticed' },
@@ -24,7 +27,7 @@ export default function Sidebar() {
   const {
     layout, corpusName, extractRepo, busy, sources,
     treeOpen, setTreeOpen, searchOpen, setSearchOpen,
-    menuOpen, setMenuOpen, narrow, ingestDocuments,
+    menuOpen, setMenuOpen, narrow, ingestDocuments, openPalette,
   } = useGraph();
   const pickerRef = useRef(null);
   const zipRef = useRef(null);
@@ -90,6 +93,16 @@ export default function Sidebar() {
             <button className="close drawer-close" onClick={close} aria-label="Close menu">×</button>
           )}
         </div>
+
+        {/* The shortcut is the fast path, but a shortcut nobody is told about
+            does not exist — and a phone has no Cmd key at all. */}
+        <button
+          className="palette-open"
+          onClick={() => { openPalette(); close(); }}
+        >
+          <span>Search everything</span>
+          <kbd>{IS_MAC ? '⌘' : 'Ctrl'} K</kbd>
+        </button>
 
         <ul className="nav">
           {NAV.map((n) => (

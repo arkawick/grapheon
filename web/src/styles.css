@@ -934,3 +934,93 @@ body.resizing * { cursor: col-resize !important; }
   color: var(--accent); font: inherit; font-size: 10.5px; cursor: pointer;
 }
 .kb-code-link:hover { background: rgba(125, 211, 252, 0.2); }
+
+/* --- command palette ------------------------------------------------------ */
+/* Above the phone drawer (z 20) and its scrim (19): the palette is reachable
+   from every layer, so it has to sit on top of all of them. */
+.pal-scrim {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(5, 5, 10, 0.55);
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 12vh 16px 16px;
+}
+.palette {
+  width: min(620px, 100%); max-height: 70vh; display: flex; flex-direction: column;
+  background: #14141c; border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55); overflow: hidden;
+}
+.pal-input {
+  padding: 14px 16px; background: none; border: 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text); font: inherit; font-size: 15px; outline: none;
+}
+.pal-list { overflow-y: auto; padding: 6px; }
+.pal-list h4 {
+  margin: 8px 8px 4px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim);
+}
+.pal-row {
+  display: flex; align-items: baseline; gap: 9px; width: 100%;
+  padding: 7px 10px; border: 0; border-radius: 7px; background: none;
+  color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+/* One highlight, driven by the keyboard index — a separate :hover style would
+   mean two rows looking selected at once. */
+.pal-row.active { background: rgba(125, 211, 252, 0.14); }
+.pal-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: var(--dim); align-self: center;
+}
+.pal-dot.command { background: none; border: 1.5px solid var(--accent); border-radius: 2px; }
+.pal-dot.file { background: none; border: 1.5px solid var(--dim); }
+/* min-width:0 is what actually lets it shrink — flex items refuse to go below
+   their content width without it, so one docstring-length label pushed the
+   path off the row entirely. */
+.pal-label {
+  /* min-width:0 lets a flex item shrink below its content; the max-width is
+     what stops it winning anyway. Node labels can be a whole docstring line,
+     and without a cap that one row's path is squeezed to nothing. */
+  min-width: 0; max-width: 62%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pal-sub {
+  flex: 1; min-width: 0; font-size: 11px; text-align: right;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  direction: rtl; /* keep the FILENAME end of a long path visible, not the root */
+}
+.pal-foot {
+  display: flex; gap: 14px; padding: 7px 14px; font-size: 11px;
+  border-top: 1px solid var(--border);
+}
+.pal-foot kbd {
+  display: inline-block; min-width: 16px; margin-right: 3px; padding: 0 4px;
+  border: 1px solid var(--border); border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05); font: inherit; font-size: 10px; text-align: center;
+}
+
+.palette-open {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: calc(100% - 24px); margin: 0 12px 10px; padding: 7px 10px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
+  border-radius: 8px; color: var(--dim); font: inherit; font-size: 11.5px;
+  white-space: nowrap; cursor: pointer;
+}
+.palette-open:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.palette-open kbd {
+  flex-shrink: 0; padding: 1px 4px; border: 1px solid var(--border);
+  border-radius: 4px; font: inherit; font-size: 9.5px;
+}
+
+.tree-recent { border-bottom: 1px solid var(--border); padding-bottom: 6px; margin-bottom: 4px; }
+.tree-recent h4 {
+  margin: 6px 8px 2px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim);
+}
+
+@media (max-width: 720px) {
+  /* Higher on a phone: the keyboard takes the bottom half of the screen, so a
+     vertically-centred palette would have its results hidden behind it. */
+  .pal-scrim { padding: 6vh 8px 8px; }
+  .palette { max-height: 82vh; }
+  .pal-sub { display: none; }
+}
