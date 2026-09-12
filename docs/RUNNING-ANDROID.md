@@ -181,7 +181,10 @@ The rest:
 | Variant | debug | release |
 | Signer | `CN=Android Debug` | `CN=Grapheon, OU=Dev, O=Grapheon, C=IN` |
 | Debuggable | yes | no |
-| Size | 5.8 MB | 5.2 MB |
+| Size | 5.8 MiB | 5.13 MiB (5,382,914 bytes) |
+
+> Sizes elsewhere in these docs are decimal MB, so the release APK is quoted as
+> **5.4 MB** in `README.md` and `CLAUDE.md`. Same file.
 
 They **cannot upgrade each other on a device** — different signatures, so
 installing one over the other gives `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
@@ -475,10 +478,18 @@ line after any plugin change.
 
 `cap sync` copies the built `dist` into `android/app/src/main/assets/public` —
 megabytes of minified one-line JS **inside the repo tree**. Any corpus walk
-that doesn't skip `android/` feeds those bundles back into the parser. The
-skip lists in `extract/node.mjs`, `web/src/lib/corpus.js` and `web/_drive.mjs`
-all exclude it, and `corpus.js` additionally guards on `looksMinified`
-(>400 chars per line on average). Keep those lists in step.
+that doesn't skip `android/` feeds those bundles back into the parser.
+
+`extract/node.mjs` and `web/_drive.mjs` exclude it. **`web/src/lib/corpus.js`
+and `pipeline/collect-sources.js` do not** (audited 2026-09-12) — `corpus.js`
+is saved by its `looksMinified` guard (>400 chars per line on average), but
+`collect-sources.js` has no such guard and captured 25 files under
+`android/app/src` into `data/grapheon/sources.json`.
+
+Four independent skip lists, no two identical. Keeping them in step by hand has
+now failed three times (`.claude/worktrees`, `android/`, and
+`web/public/data/*/src`); the table in `CLAUDE.md` under *Code ↔ docs join* has
+the current diff.
 
 ### Moving or deleting `web/android` fails with "Device or resource busy"
 

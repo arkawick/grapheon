@@ -315,7 +315,7 @@ against fresh edges and silently returns a *smaller* blast radius — a
 plausible-looking wrong answer, which is the worst kind.
 
 Source text is served **per file** from the mirrored tree, never as one blob:
-Aeon's corpus is 18 MB of text and nobody should download that to read one
+Aeon's corpus is 16 MB of text and nobody should download that to read one
 function.
 
 ---
@@ -333,6 +333,24 @@ viewports, in-browser extraction, the code viewer, file explorer, cross-file
 search, knowledge base, PDF ingestion, history, corpus diff, the command
 palette, and the standalone HTML export opened from `file://`. It **fails the
 run on any console error**, and it prints a line per feature with real numbers.
+
+A green run on 2026-09-12 reported, among 25 such lines:
+
+```
+insights   : Depended on 15 | Unused 96 | Cycles 0 | Coupling 12; top hub instances.py
+blast      : 12 entities affected within 3 hops
+rings      : direct 10 | 2 hops 1 | 3 hops 1
+self-map   : 293 nodes, 18 subsystems (55 files extracted in-browser)
+knowledge  : 7 documents · 297 passages; 172 nodes, 6 subsystems; 25 hits
+history    : restored in 398ms with sources intact
+join       : 140 mentions connect it to the current corpus
+map export : 0.31 MB standalone; 1,038 nodes, 24 of 48 subsystems in legend
+mobile code: 163 lines full-screen at 390px, horizontal overflow 0px (want 0)
+```
+
+Those are the numbers to diff against when something feels off — a drop in
+`self-map` node count or `join` mentions is a regression the drive will not
+otherwise fail on.
 
 To drive a container instead of a host dev server:
 
@@ -424,11 +442,17 @@ To ship the code viewer with the demo, commit the sources for a corpus whose
 code you own:
 
 ```bash
-git add -f data/grapheon/sources.json      # 804 KB, this repo's own source
+git add -f data/grapheon/sources.json      # 802 KB, this repo's own source
 ```
 
-`data/aeon/sources.json` is 980 KB of a *different* project's code; publishing
+`data/aeon/sources.json` is 979 KB of a *different* project's code; publishing
 that is a separate decision from publishing its graph.
+
+> Check what is actually in it first. `collect-sources.js` does not skip
+> `android/` or `web/public/data/`, so the current `data/grapheon/sources.json`
+> holds 136 paths of which 75 are Aeon's mirrored source and 25 are synced
+> Capacitor bundles — committing it as "this repo's own source" would not be
+> true today. Rebuild it from a clean tree first.
 
 > **nginx warning.** Never add a `types { ... }` block to the server context.
 > It **replaces** the whole inherited MIME map, so declaring
@@ -493,11 +517,20 @@ outside desktop; use **Open a repo .zip…**.
 
 ### Cross-file search feels slow
 
-It shouldn't — ~3s cold over 142 files, ~110ms warm. Search fetches in
-**batches of 12**; awaiting each file sequentially made a cold search take
-**25 seconds**, one round trip each plus a per-file `setTimeout(0)` that
-browsers clamp to ~4ms. If it regresses, check the concurrency in
-`web/src/lib/search.js` before anything else.
+It shouldn't — **1.6s cold** over Aeon's 142 files (measured by the drive,
+2026-09-12), and warm searches run from cache. Search fetches in **batches of
+12**; awaiting each file sequentially made a cold search take **25 seconds**,
+one round trip each plus a per-file `setTimeout(0)` that browsers clamp to
+~4ms. If it regresses, check the concurrency in `web/src/lib/search.js` before
+anything else.
+
+### The drive fails on in-browser extraction, once, then passes
+
+The first `npm run drive` against a **cold** `npm run dev` times out waiting for
+the corpus badge to flip to `grapheon-self`. Vite compiles the module worker and
+serves the WASM grammars on first request, and that cost lands inside the wait.
+Load the app in a browser once before driving it. The failure looks exactly like
+a broken worker and is not one — the identical run passes immediately after.
 
 ### A TypeScript project renders as disconnected dots
 

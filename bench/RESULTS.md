@@ -82,17 +82,52 @@ Honest notes:
 - Scored on one corpus (Aeon). A second corpus would guard against
   overfitting to graphify-on-Aeon quirks.
 
-Self-hosting proof: `node extract/node.mjs . --out data/grapheon/graph.json`
-then `node pipeline/build.js --name grapheon` — Grapheon extracts ITSELF and
-renders its own map (71 nodes, 9 communities, 149 ms), with zero Python in
-the chain.
+## Self-hosting
+
+`node extract/node.mjs . --out data/grapheon/graph.json` then
+`node pipeline/build.js --name grapheon` — Grapheon extracts ITSELF and renders
+its own map, with zero Python in the chain.
+
+Re-measured 2026-09-12 against a clean `git archive` of `HEAD`:
+
+```
+55 files -> 263 nodes, 576 links in 430 ms      (extract)
+          -> 293 nodes, 576 edges, 18 communities in 851 ms  (adapt + Louvain + FA2)
+```
+
+The 293 vs 263 gap is the adapter materialising 30 external packages as nodes.
+The in-browser path agrees exactly: the Playwright drive feeds the same 55
+files to the Worker and the sidebar reports **293 nodes · 18 subsystems**.
+
+> **Extract from a clean tree, not the working tree.** `web/public/data/<name>/src/`
+> is a mirrored copy of *another repo's* source, and no skip list excludes it —
+> so `extract/node.mjs .` on a working tree that has built artifacts in it
+> reports **917 nodes from 139 files, 654 of them (71%) Aeon's code, not
+> Grapheon's**. Same family as the `android/` and `.claude/worktrees` traps.
+> `git archive $(git write-tree) | tar -x -C <dir>` and extract that.
+
+The committed `data/grapheon/graph.canonical.json` (101 nodes, 164 edges, 9
+communities) predates most of the app and is due a rebuild.
 
 ## Reproduce
 
 ```bash
 cd bench
 npm install
-node parse-bench.mjs        # Node: speed + recall vs data/aeon/graph.json
 node pack-corpus.mjs        # snapshot corpus -> corpus.json (gitignored)
+node parse-bench.mjs        # Node: speed + entity recall
 node drive-browser.mjs      # Chromium: same parse, real WASM fetch/init
 ```
+
+Edge scoring lives in `extract/`, not `bench/`, and takes the extractor output
+as its argument — ground truth is resolved automatically:
+
+```bash
+node extract/score.mjs extract/graph.extracted.json
+```
+
+> `parse-bench.mjs` still points `TRUTH` at `data/aeon/graph.json`, which is
+> gitignored and no longer present — it needs repointing at
+> `bench/ground-truth/aeon.graphify.canonical.json` (the adapted shape) before
+> it will run. `score.mjs` already reads the committed ground truth and was
+> re-run clean on 2026-09-12: **1307/1338 (97.7%)**, the table above unchanged.

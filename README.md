@@ -243,7 +243,7 @@ circles whose positions are already computed.
 Loading a corpus used to *destroy* the previous one — opening a second repo
 meant re-picking the folder and re-parsing to get the first back. Every build
 is now saved to IndexedDB, and **History** lists them for instant restore
-(measured: **261 ms**, versus seconds of re-extraction), with sources, edges
+(measured: **398 ms**, versus seconds of re-extraction), with sources, edges
 and the knowledge index all intact.
 
 Builds are **versioned**: re-extracting a changed repo keeps the previous
@@ -298,8 +298,9 @@ Android WebViews don't have yet.)
   and each hit opens its source document at that passage's own line.
 - **The same Atlas renders it.** The document graph goes through the identical
   pipeline (Louvain → ForceAtlas2), so your documents become a map clustered
-  by shared vocabulary — 18 of Aeon's markdown files give 284 nodes in 7
-  topic clusters. Section-to-section similarity edges are tagged `INFERRED`,
+  by shared vocabulary — Grapheon's own 7 markdown files give 297 passages and
+  **172 nodes in 6 topic clusters**, which is what `npm run drive` reproduces
+  on every run. Section-to-section similarity edges are tagged `INFERRED`,
   because word overlap is a guess where a heading hierarchy is a fact.
 
 What it deliberately does **not** do is write prose answers — that needs an
@@ -325,8 +326,9 @@ code" from the writer), a form shared by two entities is dropped rather than
 guessed, and a term appearing in a fifth of all passages is treated as
 vocabulary rather than a reference.
 
-On Aeon that gives 218 mentions — `Neo4jStore` correctly resolving to the one
-passage that discusses it, in "Hard-won gotchas".
+Joining Grapheon's docs to Grapheon's code gives **140 mentions** — the figure
+the drive checks on every run. The rules are what keep it that low: a looser
+matcher would report several times as many and mean nothing.
 
 ---
 
@@ -351,8 +353,8 @@ open, and closing one falls back to its left neighbour.
 **Search** scans the contents of every readable file — the question the graph
 can't answer, like *where does `AZURE_OPENAI_ENDPOINT` appear*. Results stream
 in grouped by file with the match highlighted; clicking a hit opens that file
-at that line. A cold search over Aeon's 142 files takes ~3s (each file is
-fetched once), and every search after that is ~110ms.
+at that line. A cold search over Aeon's 142 files takes **~1.6s** (each
+file is fetched once); every search after that reads from cache.
 
 Select any entity and hit **View code** — the map shrinks left, the source
 opens right, scrolled to that entity's lines with its range highlighted.
@@ -373,13 +375,24 @@ npm run build:graph -- --name aeon
 
 ## Current state
 
-Extracted from Project-Aeon: **1038 nodes, 1678 edges, 48 communities**. The top
-communities Louvain finds are `api.js`, `graph.py` (the LangGraph agent),
-`blast_radius_service.py`, `llm.py` — i.e. it recovers Aeon's actual
-architecture without being told anything about it.
+*Every number below re-measured 2026-09-12: `npm test` green, full Playwright
+drive green, extractor scored clean.*
+
+Extracted from Project-Aeon: **1038 nodes, 1678 edges, 48 communities** — 1664
+edges EXTRACTED, 14 INFERRED. The largest communities Louvain finds are
+`api.js` (116), `graph.py` (83, the LangGraph agent), `blast_radius_service.py`
+(51), `dependencies` (47), `setup.py` (45), `main.py` (40) and `llm.py` (38) —
+i.e. it recovers Aeon's actual architecture without being told anything about
+it.
 
 Blast Radius on `aeon/frontend/src/lib/api.js` returns the real dependency
-chain: all 10 pages that import it, then `App.jsx` at 2 hops, `main.jsx` at 3.
+chain: all 10 pages that import it, then `App.jsx` at 2 hops, `main.jsx` at 3 —
+12 affected entities, every path fully EXTRACTED.
+
+**Grapheon maps itself.** 55 files → 263 entities and 576 relations in 430 ms,
+laying out to **293 nodes in 18 subsystems**, with zero Python in the chain. The
+in-browser Worker path produces the identical graph, which is what the drive
+asserts.
 
 Production build verified serving statically — no backend, and the same build
 runs in-browser extraction (WASM grammars ship as assets). Verified against the
@@ -420,16 +433,32 @@ adapter.
 - **`DEFAULT_CORPUS` is hardcoded** to `'aeon'` in `App.jsx` — other corpora
   load at runtime through the pickers or History, but there is no multi-corpus
   UI yet.
-- **The `contains` anomaly is uninvestigated** — 43 edges separate a file from
-  functions it contains, meaning Louvain sometimes splits them. Containment
-  should be near-unbreakable, so this is a correctness smell.
+- **The `contains` anomaly is uninvestigated** — but it has shrunk. On the
+  shipped Aeon layout it is now **4 of 632** `contains` edges (and 0 of 57
+  `method` edges) putting a file and a function it contains in different
+  communities. This note previously said 43. Containment should be unbreakable,
+  so it is still worth a look, but it is no longer a significant defect.
 - Community labels are the most-connected member, which is a good subsystem
   name about 80% of the time and an arbitrary one otherwise.
 - The inferred-path caveat is built but unexercised: Aeon has only 14 INFERRED
   edges and none appear in the `api.js` example.
-- No guard for a blast radius that returns most of a dense graph.
+- No guard for a blast radius that returns most of a dense graph. Aeon's worst
+  case is 57 of 1038 nodes (5.5%), so nothing forces the issue yet.
 - The adapter and layout pass have no unit tests — they're verified by eye and
-  by the Playwright drive.
+  by the Playwright drive. Everything in `web/src/lib/` is tested (77 cases
+  across 8 files), as is the extractor (9).
+- **Extracting the working tree ingests other repos' code.**
+  `web/public/data/<name>/src/` is a mirrored copy of a corpus's source sitting
+  inside the served tree, and no skip list excludes it, so
+  `node extract/node.mjs .` reports 917 nodes of which **71% are Aeon's, not
+  Grapheon's**. Extract from a clean `git archive` until the four skip lists
+  (`extract/node.mjs`, `pipeline/collect-sources.js`, `web/src/lib/corpus.js`,
+  `web/_drive.mjs`) are consolidated — they have now drifted apart three times.
+- **The bundled `grapheon` corpus is stale** — 101 nodes / 9 communities, from
+  before most of the app existed; a fresh self-extract is 293 / 18. It ships in
+  the demo and the APK that way.
+- `bench/parse-bench.mjs` points at `data/aeon/graph.json`, which is gitignored
+  and absent, so it no longer runs. `extract/score.mjs` is unaffected.
 - `pipeline/layout.js` is a *copy* of Kagami's, not a shared import, and has
   diverged. Improvements don't flow back.
 - **Real-device Android performance is still unmeasured.** The APK is built,

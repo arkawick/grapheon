@@ -22,6 +22,8 @@ For commands, see [RUNNING-WEB.md](RUNNING-WEB.md) and
 - [Certainty: EXTRACTED vs INFERRED](#certainty-extracted-vs-inferred)
 - [The features, and what each one had to solve](#the-features-and-what-each-one-had-to-solve)
 - [Reproducibility](#reproducibility)
+- [What defines a corpus](#what-defines-a-corpus)
+- [Testing and CI](#testing-and-ci)
 - [Repository layout](#repository-layout)
 
 ---
@@ -360,6 +362,82 @@ timestamp and always differs.
 app refuses to mix builds. Without it, a cached layout resolves fewer ids
 against fresh edges and silently returns a *smaller* blast radius — a
 plausible-looking wrong number, which is worse than an error.
+
+---
+
+## What defines a corpus
+
+Before anything is parsed, something has to decide **which files are the
+repository**. That decision is currently made in four places, and it is the
+weakest seam in the system.
+
+| | walks for | skips |
+|---|---|---|
+| `extract/node.mjs` | parseable source, CLI | `android`, tooling dirs |
+| `web/src/lib/corpus.js` | parseable + readable, browser | tooling dirs, `looksMinified` guard |
+| `pipeline/collect-sources.js` | readable text, CLI | tooling dirs, `site-packages` |
+| `web/_drive.mjs` | the drive's own fixture | `android`, `data`, `bench` |
+
+No two lists are identical, and the drift is not cosmetic — it changes what the
+graph *is*. Three failures so far, each found only by noticing a wrong number:
+
+- `.claude/worktrees` holds whole **copies** of a repo, so every class existed
+  twice and the docs↔code join refused `ChromaStore` as ambiguous. The matcher
+  was right; the corpus was wrong.
+- `android/app/src/main/assets/public` holds the **synced production bundle** —
+  megabytes of minified one-line JS — which stalls the parser for tens of
+  seconds when walked.
+- `web/public/data/<name>/src/` is a **mirrored copy of another repo's source**,
+  served so the code viewer can fetch one file at a time. Nothing excludes it,
+  so extracting the working tree yields 917 nodes of which 654 are Aeon's.
+
+The shape of the fix is obvious — one exported predicate, imported by all four
+— and the reason it matters architecturally is that **corpus boundary is part of
+the contract**, not an implementation detail of whoever happens to be walking.
+A graph is only meaningful relative to the set of files it claims to cover.
+
+---
+
+## Testing and CI
+
+Three layers, deliberately different in cost and in what they can catch.
+
+**Unit tests — 86, about a second, no browser.** `node --test` over pure
+modules: `blast` 11, `palette` 15, `join` 11, `diff` 9, `insights` 9,
+`knowledge` 9, `exportHtml` 8, `corpus` 5, and `extract` 9 against the **real**
+tree-sitter grammars rather than stubs — the risk there is what the grammar
+actually names its nodes, and a stub would only encode the author's assumptions.
+This is why `blast.js`, `insights.js` and the rest are pure over plain data
+structures with no React: testability is the reason for the shape.
+
+Not covered: `pipeline/adapters/graphify.js` and `pipeline/layout.js`.
+
+**The Playwright drive — the real regression net.** One pass over the whole app
+at desktop and phone viewports, which **fails on any console error** and prints
+~25 lines of real measurements rather than assertions alone. It is the only
+thing that exercises the Worker, the WebGL renderer, IndexedDB, PDF parsing and
+the `file://` export together. Numbers, not booleans, is the point: a silent
+drop from 293 self-map nodes to 200 is a regression no assertion was written for.
+
+One thing it structurally cannot catch: the StrictMode WebGL init race wedges
+the app **only on some machines and never in headless**.
+
+**CI — three workflows on every push to `main`.** `test.yml` runs the units and
+then the drive against the *production* build via `vite preview`; `pages.yml`
+deploys the demo with `GRAPHEON_BASE` set from `actions/configure-pages`;
+`android.yml` attaches a debug APK.
+
+The rule that CI taught, expensively: **a local build proves nothing about CI.**
+Both use the working tree; CI uses what git ships. A blanket `*.png` in
+`.gitignore` swallowed 26 committed Android resources and every local build
+stayed green for weeks. To reproduce anything CI-only:
+
+```bash
+git archive $(git write-tree) | tar -x -C <dir>   # exactly what CI checks out
+```
+
+The same command is the correct way to extract Grapheon's own source, for the
+corpus-boundary reason above.
 
 ---
 

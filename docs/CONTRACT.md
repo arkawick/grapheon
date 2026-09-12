@@ -67,14 +67,19 @@ app needs for first paint, which is what makes a backendless static deploy work.
 ```json
 {
   "meta":   { "source": "graphify", "name": "aeon", "laid_out_at": "…",
-              "iterations": 600, "buildId": "3f9a2c1b8de4" },
+              "iterations": 600, "buildId": "7d68733a4699",
+              "counts": { "nodes": 1038, "edges": 1678, "materialised_external": 47 } },
   "nodes":  [{ "id": "…", "l": "llm.py", "k": "code", "c": 7, "h": 210,
                "r": 9.4, "x": 4021, "y": 2887, "a": { "path": "…", "loc": "L1" } }],
-  "bounds": { "width": 7203, "height": 7203 },
+  "bounds": { "width": 7204, "height": 7204 },
   "communities": [{ "id": 7, "hue": 210, "size": 38, "label": "llm.py" }],
   "kinds":  ["code", "concept", "document", "external", "rationale"]
 }
 ```
+
+`meta` is the canonical graph's `meta` plus the three layout fields, so
+`meta.counts.edges` is readable before `edges.json` is fetched — which is what
+decides whether edges load eagerly (§3).
 
 Single-letter keys are deliberate: Kagami's 8000-node layout is 2.4 MB *with*
 them.
@@ -108,10 +113,15 @@ reads as pure position.
 
 ```json
 {
-  "meta":  { "buildId": "3f9a2c1b8de4" },
+  "meta":  { "buildId": "7d68733a4699" },
   "edges": [["aeon_backend_core_llm", "os", "imports", "EXTRACTED"]]
 }
 ```
+
+Relations in the Aeon corpus, for scale: `contains` 632, `calls` 243,
+`imports_from` 203, `references` 205, `imports` 178, `rationale_for` 123,
+`method` 57, `inherits` 23, `indirect_call` 14. Certainty splits 1664
+EXTRACTED / 14 INFERRED.
 
 Fetched **before first paint when the corpus is small enough to draw edges**
 (`meta.counts.edges` decides, without fetching the file), and lazily on first
@@ -134,19 +144,34 @@ The manifest is small and eagerly fetched:
 
 ```json
 {
-  "meta":  { "buildId": "3f9a2c1b8de4" },
-  "base":  "/data/aeon/src",
+  "meta":  { "buildId": "7d68733a4699" },
+  "base":  "data/aeon/src",
   "paths": ["aeon/backend/core/llm.py", "…"]
 }
 ```
 
-The text itself is a **mirrored tree**, one file per source file, fetched
-individually on demand: `/data/aeon/src/aeon/backend/core/llm.py`.
+**`base` is relative — no leading slash.** It is joined onto
+`import.meta.env.BASE_URL` by `assetUrl()` (`web/src/lib/asset.js`). An absolute
+`/data/aeon/src` resolves to the *domain* root, which is correct only when the
+site is served from `/`; on a GitHub Pages project site every source fetch 404s
+and the app sits on "Loading atlas…" forever. See the `GRAPHEON_BASE` section of
+[RUNNING-WEB.md](RUNNING-WEB.md#deploying-under-a-subpath).
 
-Deliberately not one blob. Aeon's full corpus is 18 MB of text; a reader
-opening one function should download the ~4 KB they are reading, not the
-repository. Only files the graph actually references are captured — a repo's
-parseable files and its *mapped* files are different sets.
+The text itself is a **mirrored tree**, one file per source file, fetched
+individually on demand at `<BASE_URL>` + `base` + path — so
+`/data/aeon/src/aeon/backend/core/llm.py` at a domain root, and
+`/grapheon/data/aeon/src/…` under a subpath deploy.
+
+> That mirrored tree is a copy of **another repository's source inside this
+> one**, which makes it a trap for anything that walks the working tree looking
+> for code. None of the extractor's skip lists exclude it today. See
+> [ARCHITECTURE.md § What defines a corpus](ARCHITECTURE.md#what-defines-a-corpus).
+
+Deliberately not one blob. Aeon's full corpus is 16 MB of text across 1202
+files; a reader opening one function should download the ~4 KB they are
+reading, not the repository. Only files the graph actually references are
+captured — a repo's parseable files and its *mapped* files are different sets,
+and for Aeon that is 142 files / 0.96 MB against the full 1202 / 16 MB.
 
 For a corpus extracted in the browser there is no fetch at all: the worker
 still holds every file in memory, so the viewer reads from there.

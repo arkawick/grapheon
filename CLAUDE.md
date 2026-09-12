@@ -179,6 +179,12 @@ cheap one. The browser receives coordinates and **never runs physics**.
   nothing about whether the layout is any good.
 - **`node --test <dir>` fails** with MODULE_NOT_FOUND on Node 22 here; point it at the
   file (`node --test src/lib/blast.test.js`).
+- **The first drive against a COLD `npm run dev` fails** at the in-browser extraction
+  step (`waitForFunction` on the `grapheon-self` corpus badge). Vite compiles the module
+  worker and serves the WASM grammars on demand, and that first-request cost lands
+  inside the wait. The identical run passes immediately afterwards. Load the app once
+  before driving it, or don't trust a single red run — the failure looks exactly like a
+  broken worker and is not one.
 - **graphify labels methods with a leading dot** (`.connect()`) while functions
   are bare (`connect()`). Any name comparison against its output must strip
   both the dot and the `()` — this artifact alone turned a true 100% recall
@@ -199,9 +205,29 @@ cheap one. The browser receives coordinates and **never runs physics**.
 
 ## State
 
-Extracted from Project-Aeon: **1038 nodes, 1678 edges, 48 communities**. Louvain
-recovers the real architecture (`api.js`, `graph.py`, `blast_radius_service.py`,
-`llm.py`) without being told anything about it.
+Re-verified 2026-09-12: `npm test` green (86), full drive green against a warm dev
+server, `extract/score.mjs` 97.7%.
+
+Extracted from Project-Aeon: **1038 nodes, 1678 edges, 48 communities** (1664
+EXTRACTED / 14 INFERRED; kinds: 558 code, 292 document, 123 rationale, 47 external,
+18 concept). Louvain recovers the real architecture — the top communities are
+`api.js`, `graph.py`, `blast_radius_service.py`, `dependencies`, `setup.py`,
+`main.py` — without being told anything about it.
+
+Numbers the drive prints, as of the last green run:
+
+| | |
+|---|---|
+| Insights on Aeon | 15 hubs (top `instances.py`), 96 unused, 60 entry points held back, 0 cycles, 12 coupling |
+| Blast on `api.js` (in, d3) | 12 affected — 10 direct, `App.jsx` at 2, `main.jsx` at 3 |
+| Change set, 2 roots | 12 → 39 |
+| Self-map, in-browser | 55 files → **293 nodes, 18 subsystems** |
+| Knowledge (Grapheon's own docs) | 7 documents · 297 passages → 172 nodes, 6 subsystems |
+| Join (docs ↔ self) | 140 mentions |
+| Cross-file search | 11 matches in 5 files, **1580 ms cold** over 142 files |
+| History restore | 398 ms, sources intact |
+| HTML export | 0.31 MB, 24 of 48 subsystems in the legend |
+| Mobile | 390px bar in 390px, code pane overflowX 0 |
 
 Working: Atlas (map, search, kind filters, subsystem legend, click-to-select with
 neighbourhood spotlight), Blast Radius (both directions, depth 1–6, path-certainty),
@@ -230,7 +256,9 @@ node extract/node.mjs <repo> --out data/<name>/graph.json
 node pipeline/build.js --name <name>
 ```
 
-Self-hosting works (Grapheon maps itself, zero Python). Still unproven:
+Self-hosting works (Grapheon maps itself, zero Python): 55 files → 263 nodes /
+576 links in 430 ms, laying out to **293 nodes, 18 communities** — but only from
+a CLEAN tree, see the `web/public/data/*/src` trap in Known gaps. Still unproven:
 real-device Android performance, and fidelity on a second corpus — the scoring
 is against graphify-on-Aeon and may inherit its quirks.
 
@@ -425,7 +453,7 @@ highlight.js, python + javascript only.
   and the map was silently cropped (measured: container 750px, canvas 1392px).
   `AtlasRenderer` now holds a `ResizeObserver` on its container.
 - Sources are served **per file** from a mirrored tree, never as one blob —
-  see `docs/CONTRACT.md` §4 for why (Aeon's corpus is 18 MB of text).
+  see `docs/CONTRACT.md` §4 for why (Aeon's corpus is 16 MB of text across 1202 files).
 - **Mobile**: full-screen overlay, wrap ON by default (without it llm.py needs
   706px of horizontal scroll in a 390px viewport). The drive asserts
   `overflowX === 0` on the phone pass.
@@ -527,6 +555,22 @@ Precision is everything; a noisy join is worse than none. The rules:
 `extract/node.mjs` still walked `.claude/worktrees`, which holds whole COPIES
 of a repo, so every class existed twice and the join refused to link
 `ChromaStore` as ambiguous. The rule was right; the corpus was wrong.
+
+**They have drifted again** (audited 2026-09-12). Four lists, no two identical:
+
+| dir | `extract/node.mjs` | `pipeline/collect-sources.js` | `web/src/lib/corpus.js` | `web/_drive.mjs` |
+|---|---|---|---|---|
+| `android` | skip | **no** | **no** | skip |
+| `site-packages` | **no** | skip | **no** | **no** |
+| `data` / `bench` | **no** | **no** | **no** | skip |
+| `web/public/data/*/src` | **no** | **no** | **no** | (via `data`) |
+
+Consequences measured, not theorised: `web/public/data/grapheon.sources.json`
+carries 136 paths of which **75 are under `web/public/data`** (Aeon's mirrored
+source) and **25 under `android/app/src`** (synced minified bundles), because
+`collect-sources.js` skips neither. Only `_drive.mjs` produces a clean
+self-map, and only because it happens to skip `data` for unrelated reasons.
+The right fix is one shared list, not a fourth copy.
 
 Also: when a join finds nothing, check the docs actually use that name before
 suspecting the matcher. Aeon's docs say "ChromaDB" 56 times and "ChromaStore"
@@ -634,9 +678,11 @@ like a `.md`. Three traps, each cost a round:
 repo as a graph. Opens ANY readable file, not just graph nodes — that gap was
 the whole reason it exists: a dropped folder's README/compose/CI files have no
 nodes and were unreachable.
-- `corpus.js` now returns `{files, readable}`: `files` is what the extractor
-  parses (.py/.js/.jsx, mirroring extract/node.mjs exactly), `readable` is
-  every text file. Keep them in step or the browser and CLI graphs diverge.
+- `corpus.js` returns `{files, readable}`: `files` is what the extractor parses
+  — `.py .js .jsx .ts .tsx .mts .cts`, the same seven `extract/node.mjs` keys
+  `EXTS` on (verified 2026-09-13) — and `readable` is every text file
+  (`.md .markdown .rst .txt .json .mjs .cjs` + `READABLE_NAMES`). Keep the two
+  parseable sets in step or the browser and CLI graphs diverge.
 - `openPath` is separate state from `selected` on purpose. Most readable files
   have no node, so routing them through the selection would mean inventing
   graph entities that do not exist.
@@ -666,8 +712,9 @@ nodes and were unreachable.
 - **Cross-file search fetches in BATCHES of 12** (`lib/search.js`). Awaiting
   each file sequentially made a cold search take **25 SECONDS** over 142 files
   — one round trip each, plus a per-file `setTimeout(0)` browsers clamp to
-  ~4ms. Batched: ~3s cold, ~110ms warm. If search ever feels slow again,
-  check the concurrency before anything else.
+  ~4ms. Batched: **1.6s cold** over Aeon's 142 files (drive-measured
+  2026-09-12), warm from cache. If search ever feels slow again, check the
+  concurrency before anything else.
 
 ## Logo
 
@@ -706,15 +753,85 @@ recall number ever looks suspiciously perfect, check what TRUTH points at.
 - **`DEFAULT_CORPUS` is hardcoded to `'aeon'`** in `App.jsx`. Multi-corpus is the next feature;
   the natural second is Kagami's *source* (a normal Python+JS codebase Graphify can
   extract directly) — **not** its AniList API, which needs Docker and a backend on :8100.
-- **The `contains` anomaly is uninvestigated**: 43 edges separate a file from functions
-  it contains, meaning Louvain sometimes splits them. Containment should be
-  near-unbreakable — likely wants a weight above 1.0. Correctness smell, not cosmetic.
+- **The `contains` anomaly is uninvestigated**, and is now much smaller than it was.
+  Re-measured 2026-09-13 on the shipped Aeon layout: **4 of 632 `contains` edges**
+  (0.6%) put a file and a function it contains in different communities, and **0 of 57
+  `method` edges** do. The note used to say 43. Containment should be unbreakable —
+  it likely wants a weight above 1.0 — but at four edges this is a curiosity, not the
+  correctness smell it was filed as. Re-check before spending time on it.
 - The INFERRED caveat UI is **built but unexercised** — Aeon has only 14 inferred edges
   and none appear in the `api.js` example.
-- No guard for a blast radius that returns most of the graph on a dense corpus.
-- Only `blast.js` is tested. The adapter and layout pass are verified by eye and by the
-  Playwright drive.
+- No guard for a blast radius that returns most of the graph on a dense corpus. The
+  worst case on Aeon today is 57 of 1038 nodes (5.5%, `azure_available()` at depth 3),
+  so nothing forces the issue yet — a denser corpus would.
+- **The adapter and `pipeline/layout.js` have no unit tests.** Everything under
+  `web/src/lib/` does (8 files, 77 tests) plus `extract/extract.test.js` (9), but the
+  two pipeline passes are verified only by eye and by the Playwright drive.
+- **`web/public/data/<name>/src/` is skipped by nothing.** It is a mirrored copy of
+  another repo's source sitting inside the served tree, so extracting the working tree
+  ingests it: `extract/node.mjs .` today reports 917 nodes from 139 files, **654 of them
+  (71%) Aeon's code**. A clean `git archive` gives the true 55 files / 293 nodes. Third
+  instance of this trap (`.claude/worktrees`, `android/`, now this) — see the skip-list
+  drift note under Hard-won gotchas.
+- **`data/grapheon/graph.canonical.json` is stale** — 101 nodes / 164 edges / 9
+  communities, from before most of the app existed. A fresh self-extract is 293 / 576 /
+  18. It ships in the demo and the APK.
+- **`bench/parse-bench.mjs` cannot run**: `TRUTH` is a hardcoded absolute path to
+  `data/aeon/graph.json`, which is gitignored and absent. `extract/score.mjs` is fine.
 - `pipeline/layout.js` is a **copy** of Kagami's, not a shared import, and has diverged
   (string ids, no log-compression, density-adaptive physics, seeding). Improvements do
   not flow back.
 - 12 n8n workflow JSON files in Aeon produced zero nodes and are absent from the graph.
+
+## Where to pick up (paused 2026-09-13)
+
+Nothing is half-finished: the working tree is docs-only changes on top of
+`1419d06`, `npm test` is green (86), the drive is green, and the extractor
+scores 97.7%. The last session re-measured every number in every `.md` file and
+corrected the stale ones; what follows is what that audit *found* rather than
+fixed, roughly in the order worth doing.
+
+**1. Consolidate the four corpus skip lists.** The highest-value fix and the
+one that keeps biting. `extract/node.mjs`, `pipeline/collect-sources.js`,
+`web/src/lib/corpus.js` and `web/_drive.mjs` each carry their own list and no
+two agree — the table is under *Code ↔ docs join*, the reasoning under
+`docs/ARCHITECTURE.md` § What defines a corpus. Export one predicate from a
+shared module and import it in all four. Add `web/public/data` (mirrored source
+of *other* repos) and `android` to it; today only `_drive.mjs` produces a clean
+self-map, and only by accident. This is a correctness bug: `extract/node.mjs .`
+on the working tree is 71% Aeon's code.
+
+**2. Rebuild `data/grapheon/`** once (1) lands — the committed canonical graph
+is 101 nodes from before most of the app existed, against 293 today, and it is
+what the Pages demo and the APK ship. Do it from a clean tree:
+`git archive $(git write-tree) | tar -x -C <dir>`, extract *that*, then
+`node pipeline/build.js --name grapheon`.
+
+**3. Repoint `bench/parse-bench.mjs`.** `TRUTH` is a hardcoded absolute path to
+`data/aeon/graph.json`, which is gitignored and absent, so the script cannot
+run at all. It wants `bench/ground-truth/aeon.graphify.canonical.json` and the
+canonical edge shape. `extract/score.mjs` already does this correctly — copy
+its resolution.
+
+**4. The debug-APK-on-a-real-phone perf test**, still owed since the Android
+work. `android/app/build/outputs/apk/debug/app-debug.apk` is on disk. The open
+question is WASM extraction wall-clock on mid-range hardware; `bench/RESULTS.md`
+extrapolates 2–9 s for a typical repo but that is arithmetic, not a measurement.
+
+**5. Multi-corpus UI.** `DEFAULT_CORPUS` is still hardcoded to `'aeon'` in
+`App.jsx`; History and the pickers are the only way to reach anything else.
+
+Lower priority: unit tests for the adapter and `pipeline/layout.js` (the only
+untested code that matters); `enableV3Signing` for key rotation; the `contains`
+anomaly, which re-measured at 4 of 632 edges and is no longer worth the "smell"
+label it carried.
+
+**Before you trust a red drive run:** load the app in a browser once first. The
+first drive against a cold `npm run dev` times out on in-browser extraction
+because Vite compiles the worker and serves the WASM inside the wait. It looks
+exactly like a broken worker and is not one.
+
+**Still unbacked-up:** `android/keystore/grapheon-release.keystore` and
+`android/keystore.properties`. Both gitignored, both on this disk only, and
+losing them permanently loses the ability to update `app.grapheon` on any device
+that has it.
